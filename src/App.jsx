@@ -1158,6 +1158,77 @@ function Affiliates({ affiliates, setAffiliates }) {
 }
 
 // ═══════════════════════════════════════════════════════════
+//  TOUCH DATE PICKER
+// ═══════════════════════════════════════════════════════════
+function DatePicker({ label, value, onChange }) {
+  const [open, setOpen] = useState(false);
+  const todayIso = todayISO();
+  const base = value ? new Date(value + "T00:00:00") : new Date();
+  const [vy, setVy] = useState(base.getFullYear());
+  const [vm, setVm] = useState(base.getMonth());
+
+  const daysInMonth = new Date(vy, vm + 1, 0).getDate();
+  const firstDow = (new Date(vy, vm, 1).getDay() + 6) % 7;
+
+  const pick = (day) => {
+    onChange(`${vy}-${String(vm+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`);
+    setOpen(false);
+  };
+  const prevM = () => { if (vm===0){setVy(y=>y-1);setVm(11);}else setVm(m=>m-1); };
+  const nextM = () => { if (vm===11){setVy(y=>y+1);setVm(0);}else setVm(m=>m+1); };
+
+  return (
+    <div style={{ marginBottom: 10, position: "relative" }}>
+      {label && <label style={st.label}>{label}</label>}
+      <button type="button" onClick={() => setOpen(o=>!o)} style={{
+        ...st.input, textAlign: "left", cursor: "pointer", display: "flex",
+        alignItems: "center", justifyContent: "space-between", background: T.white
+      }}>
+        <span style={{ color: value ? T.text : T.text3 }}>{value ? fmtD(value) : "Επίλεξε ημέρα..."}</span>
+        <span style={{ fontSize: 16 }}>📅</span>
+      </button>
+      {open && (
+        <div style={{
+          position: "fixed", zIndex: 3000, background: T.white,
+          border: `2px solid ${T.accent}`, borderRadius: 14,
+          boxShadow: `0 12px 40px rgba(47,58,28,0.22)`, padding: 16,
+          width: 300, top: "50%", left: "50%", transform: "translate(-50%,-50%)"
+        }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+            <button type="button" onClick={prevM} style={{ background: T.cat_bg, border: `1px solid ${T.border}`, borderRadius: 8, padding: "10px 16px", cursor: "pointer", fontSize: 18, fontWeight: 700 }}>‹</button>
+            <span style={{ color: T.text, fontFamily: "Georgia, serif", fontWeight: 700, fontSize: 16 }}>{MONTHS_GR[vm]} {vy}</span>
+            <button type="button" onClick={nextM} style={{ background: T.cat_bg, border: `1px solid ${T.border}`, borderRadius: 8, padding: "10px 16px", cursor: "pointer", fontSize: 18, fontWeight: 700 }}>›</button>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 3, marginBottom: 6 }}>
+            {["Δε","Τρ","Τε","Πε","Πα","Σα","Κυ"].map((d,i)=>(
+              <div key={i} style={{ textAlign: "center", fontSize: 11, color: T.text3, fontWeight: 700, padding: "2px 0" }}>{d}</div>
+            ))}
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 4 }}>
+            {Array.from({length: firstDow},(_,i)=><div key={"e"+i}/>)}
+            {Array.from({length: daysInMonth},(_,i)=>{
+              const day = i+1;
+              const iso = `${vy}-${String(vm+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+              const sel = iso === value, isT = iso === todayIso;
+              return (
+                <button key={day} type="button" onClick={()=>pick(day)} style={{
+                  padding: "11px 2px", borderRadius: 8,
+                  border: sel ? `2px solid ${T.accent}` : isT ? `2px solid ${T.accent2}` : `1px solid ${T.border}`,
+                  background: sel ? T.accent : isT ? "#F0F4E8" : T.white,
+                  color: sel ? "#fff" : T.text, cursor: "pointer", fontSize: 14,
+                  fontWeight: sel||isT ? 700 : 400, textAlign: "center", fontFamily: "Georgia, serif"
+                }}>{day}</button>
+              );
+            })}
+          </div>
+          <Btn onClick={()=>setOpen(false)} bg={T.cat_bg} style={{ width:"100%", marginTop:12, border:`1px solid ${T.border}`, color:T.text }}>✕ Κλείσιμο</Btn>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
 //  SCHEDULE — Smart auto-schedule with constraints + ρεπό
 // ═══════════════════════════════════════════════════════════
 const SHIFTS_DEF = [
@@ -1271,6 +1342,7 @@ function Schedule({ employees, role, empId: currentEmpId }) {
   const [repForm, setRepForm] = useState({
     empId: role === "employee" ? (currentEmpId || "") : "", day: ""
   });
+  const [pendingAdd, setPendingAdd] = useState(null); // { date, shiftId, empId }
 
   // Tuesday auto-purge: remove constraints & dayOff from previous weeks
   useEffect(() => {
@@ -1290,17 +1362,43 @@ function Schedule({ employees, role, empId: currentEmpId }) {
   });
   const weekKey = weekStart;
 
-  const getSlot  = (day, shift) => schedule[weekKey]?.[day]?.[shift] || [];
-  const setSlot  = (day, shift, emps) =>
-    setSchedule(s => ({
-      ...s,
-      [weekKey]: { ...(s[weekKey] || {}), [day]: { ...(s[weekKey]?.[day] || {}), [shift]: emps } }
-    }));
+  const getSlot    = (day, shift) => schedule[weekKey]?.[day]?.[shift] || [];
+  const getArrival = (day, shift, empId) => schedule[weekKey]?.[day]?.[shift+"_arr"]?.[empId] ?? "";
 
   const toggleEmp = (day, shift, empId) => {
     if (isFrozen(day, shift)) return;
     const cur = getSlot(day, shift);
-    setSlot(day, shift, cur.includes(empId) ? cur.filter(id => id !== empId) : [...cur, empId]);
+    const removing = cur.includes(empId);
+    const newList = removing ? cur.filter(id => id !== empId) : [...cur, empId];
+    setSchedule(s => {
+      const dayData = s[weekKey]?.[day] || {};
+      const arr = { ...(dayData[shift+"_arr"] || {}) };
+      if (removing) delete arr[empId];
+      return { ...s, [weekKey]: { ...(s[weekKey]||{}), [day]: { ...dayData, [shift]: newList, [shift+"_arr"]: arr } } };
+    });
+  };
+
+  const arrivalTimes = (shiftId) => {
+    const times = [];
+    let [h, m] = shiftId === "morning" ? [6, 30] : [15, 0];
+    const [eh, em] = shiftId === "morning" ? [10, 0] : [20, 0];
+    while (h < eh || (h === eh && m <= em)) {
+      times.push(`${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}`);
+      m += 30; if (m >= 60) { h++; m = 0; }
+    }
+    return times;
+  };
+
+  const confirmAdd = (time) => {
+    if (!pendingAdd) return;
+    const { date, shiftId, empId } = pendingAdd;
+    const cur = getSlot(date, shiftId);
+    setSchedule(s => {
+      const dayData = s[weekKey]?.[date] || {};
+      const arr = { ...(dayData[shiftId+"_arr"] || {}), ...(time ? { [empId]: time } : {}) };
+      return { ...s, [weekKey]: { ...(s[weekKey]||{}), [date]: { ...dayData, [shiftId]: [...cur, empId], [shiftId+"_arr"]: arr } } };
+    });
+    setPendingAdd(null);
   };
 
   const getBusy     = (date, shift) => busy[`${date}_${shift}`] ?? 0;
@@ -1352,6 +1450,20 @@ function Schedule({ employees, role, empId: currentEmpId }) {
     const url = URL.createObjectURL(blob);
     window.open(url, "_blank");
   };
+
+  const weeklyStats = useMemo(() => {
+    const stats = {};
+    weekDates.forEach(date => {
+      SHIFTS_DEF.forEach(sh => {
+        getSlot(date, sh.id).forEach(empId => {
+          if (!stats[empId]) stats[empId] = { morning: 0, night: 0, total: 0 };
+          stats[empId][sh.id]++;
+          stats[empId].total++;
+        });
+      });
+    });
+    return Object.entries(stats).sort((a, b) => b[1].total - a[1].total);
+  }, [schedule, weekKey]); // eslint-disable-line
 
   const shiftWarnings = (assigned, shift) => {
     const emps = assigned.map(id => (employees || []).find(e => e.id === id)).filter(Boolean);
@@ -1520,6 +1632,7 @@ function Schedule({ employees, role, empId: currentEmpId }) {
                     {assignedEmps.map(emp => {
                       const isConstrained = hasConstraint(emp.id, date, shift.id);
                       const isPartner = emp.role === "partner";
+                      const arrival = getArrival(date, shift.id, emp.id);
                       return (
                         <div key={emp.id} style={{
                           display: "flex", alignItems: "center", justifyContent: "space-between",
@@ -1529,6 +1642,7 @@ function Schedule({ employees, role, empId: currentEmpId }) {
                         }}>
                           <span style={{ color: isPartner ? "#B8860B" : T.text, fontWeight: isPartner ? 700 : 400 }}>
                             {emp.name}{isConstrained ? " ⚠️" : ""}
+                            {arrival && <span style={{ fontSize: 10, opacity: 0.65, marginLeft: 4 }}>{arrival}</span>}
                           </span>
                           {role !== "employee" && !frozen && (
                             <button onClick={() => toggleEmp(date, shift.id, emp.id)}
@@ -1556,8 +1670,11 @@ function Schedule({ employees, role, empId: currentEmpId }) {
                       </div>
                     )}
                     {role !== "employee" && !frozen && (
-                      <select onChange={e => { if (e.target.value) { toggleEmp(date, shift.id, e.target.value); e.target.value = ""; } }}
-                        style={{ ...st.input, fontSize: 11, padding: "2px 4px", marginTop: assigned.length > 0 ? 4 : 0, color: T.text3 }}>
+                      <select onChange={e => {
+                        if (!e.target.value) return;
+                        setPendingAdd({ date, shiftId: shift.id, empId: e.target.value });
+                        e.target.value = "";
+                      }} style={{ ...st.input, fontSize: 11, padding: "2px 4px", marginTop: assigned.length > 0 ? 4 : 0, color: T.text3 }}>
                         <option value="">+ Εργαζόμενος</option>
                         {(employees || []).filter(e => !assigned.includes(e.id)).map(e => {
                           const constrained = hasConstraint(e.id, date, shift.id);
@@ -1573,6 +1690,54 @@ function Schedule({ employees, role, empId: currentEmpId }) {
           ))}
         </div>
       </div>
+
+      {/* Weekly stats */}
+      {weeklyStats.length > 0 && (
+        <Card style={{ background: T.white, marginTop: 16, overflowX: "auto" }}>
+          <div style={{ color: T.text2, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 }}>Σύνολο Βαρδιών Εβδομάδας</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 8 }}>
+            {weeklyStats.map(([empId, stats]) => {
+              const emp = (employees||[]).find(e => e.id === empId);
+              if (!emp) return null;
+              return (
+                <div key={empId} style={{ background: T.cat_bg, borderRadius: 8, padding: "10px 14px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div>
+                    <div style={{ color: T.text, fontSize: 13, fontWeight: 700, fontFamily: "Georgia, serif" }}>{emp.name} {emp.surname}</div>
+                    <div style={{ color: T.text3, fontSize: 11, marginTop: 2 }}>☀️ {stats.morning} &nbsp;&nbsp; 🌙 {stats.night}</div>
+                  </div>
+                  <div style={{ fontSize: 26, fontWeight: 900, color: T.accent, fontFamily: "Georgia, serif", minWidth: 36, textAlign: "right" }}>{stats.total}</div>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
+      {/* Arrival time picker modal */}
+      {pendingAdd && (() => {
+        const emp = (employees||[]).find(e => e.id === pendingAdd.empId);
+        const times = arrivalTimes(pendingAdd.shiftId);
+        return (
+          <Modal title={`⏰ Ώρα Άφιξης — ${emp?.name || ""}`} onClose={() => setPendingAdd(null)}>
+            <div style={{ color: T.text2, fontSize: 13, marginBottom: 16, fontFamily: "'Trebuchet MS', sans-serif" }}>
+              {pendingAdd.shiftId === "morning" ? "☀️ Πρωινή βάρδια (06:30 – 10:00)" : "🌙 Βραδινή βάρδια (15:00 – 20:00)"}
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 10, justifyContent: "center", marginBottom: 8 }}>
+              {times.map(t => (
+                <button key={t} onClick={() => confirmAdd(t)} style={{
+                  background: T.white, border: `2px solid ${T.border}`, borderRadius: 10,
+                  padding: "16px 14px", cursor: "pointer", fontSize: 18, fontWeight: 700,
+                  fontFamily: "Georgia, serif", color: T.text, minWidth: 80, textAlign: "center"
+                }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = T.accent; e.currentTarget.style.background = "#F0F4E8"; }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = T.border; e.currentTarget.style.background = T.white; }}
+                >{t}</button>
+              ))}
+            </div>
+            <Btn onClick={() => confirmAdd("")} bg={T.cat_bg} style={{ width: "100%", marginTop: 8, border: `1px solid ${T.border}`, color: T.text2 }}>Χωρίς ώρα άφιξης</Btn>
+          </Modal>
+        );
+      })()}
 
       {showBusy && (
         <Modal title="⚙️ Πολυσύχναστες Μέρες" onClose={() => setShowBusy(false)} wide>
@@ -1621,8 +1786,7 @@ function Schedule({ employees, role, empId: currentEmpId }) {
               <div style={{ color: T.text2, fontSize: 13, marginBottom: 12 }}>Επίλεξε ημέρα και βάρδια που <b>δεν</b> μπορείς να δουλέψεις.</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 8, marginBottom: 12 }}>
                 <div>
-                  <label style={st.label}>Ημέρα</label>
-                  <input type="date" value={conForm.day} onChange={e => setConForm(f => ({ ...f, day: e.target.value }))} style={{ ...st.input }} />
+                  <DatePicker label="Ημέρα" value={conForm.day} onChange={v => setConForm(f => ({ ...f, day: v }))} />
                 </div>
                 <Sel label="Βάρδια" value={conForm.shift} onChange={v => setConForm(f => ({ ...f, shift: v }))}
                   options={SHIFTS_DEF.map(s => ({ value: s.id, label: `${s.id === "morning" ? "☀️" : "🌙"} ${s.label}` }))} />
@@ -1654,8 +1818,7 @@ function Schedule({ employees, role, empId: currentEmpId }) {
                 <Sel label="Εργαζόμενος" value={conForm.empId} onChange={v => setConForm(f => ({ ...f, empId: v }))}
                   options={[{ value: "", label: "-- Επίλεξε --" }, ...(employees || []).map(e => ({ value: e.id, label: `${e.name} ${e.surname}` }))]} />
                 <div>
-                  <label style={st.label}>Ημέρα</label>
-                  <input type="date" value={conForm.day} onChange={e => setConForm(f => ({ ...f, day: e.target.value }))} style={{ ...st.input }} />
+                  <DatePicker label="Ημέρα" value={conForm.day} onChange={v => setConForm(f => ({ ...f, day: v }))} />
                 </div>
                 <Sel label="Βάρδια" value={conForm.shift} onChange={v => setConForm(f => ({ ...f, shift: v }))}
                   options={SHIFTS_DEF.map(s => ({ value: s.id, label: `${s.id === "morning" ? "☀️" : "🌙"} ${s.label}` }))} />
@@ -1690,8 +1853,7 @@ function Schedule({ employees, role, empId: currentEmpId }) {
             <Sel label="Εργαζόμενος" value={repForm.empId} onChange={v => setRepForm(f => ({ ...f, empId: v }))}
               options={[{ value: "", label: "-- Επίλεξε --" }, ...(employees || []).map(e => ({ value: e.id, label: `${e.name} ${e.surname}` }))]} />
             <div>
-              <label style={st.label}>Ημέρα</label>
-              <input type="date" value={repForm.day} onChange={e => setRepForm(f => ({ ...f, day: e.target.value }))} style={{ ...st.input }} />
+              <DatePicker label="Ημέρα" value={repForm.day} onChange={v => setRepForm(f => ({ ...f, day: v }))} />
             </div>
             <div style={{ display: "flex", alignItems: "flex-end", marginBottom: 10 }}>
               <Btn onClick={addRep} small>+ Προσθήκη</Btn>
