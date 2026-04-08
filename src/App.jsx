@@ -11,30 +11,31 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 //  THEME — Olive Garden 🌿
 // ═══════════════════════════════════════════════════════════
 const T = {
-  bg:         "#F8F6F1",
-  cat_bg:     "#E7D8B5",
-  card:       "#EFE8DA",
-  price_bg:   "#6F7F1F",
+  // Aegean palette
+  bg:         "#faf7f2",
+  cat_bg:     "#ede8df",
+  card:       "#f4f0e8",
+  price_bg:   "#16a298",
   price_text: "#ffffff",
-  badge_bg:   "#F2C94C",
-  badge_text: "#2F3A1C",
+  badge_bg:   "#d4ece9",
+  badge_text: "#0a4a46",
   // extended palette
-  border:     "#D4C8A8",
-  accent:     "#6F7F1F",
-  accent2:    "#8A9E28",
-  text:       "#2F3A1C",
-  text2:      "#5A6A40",
-  text3:      "#9AAA78",
-  green:      "#4A7C28",
+  border:     "#ddd5c8",
+  accent:     "#16a298",
+  accent2:    "#1ab8ac",
+  text:       "#1a1610",
+  text2:      "#5a4a3a",
+  text3:      "#8a7a68",
+  green:      "#0e8575",
   red:        "#C0392B",
   blue:       "#2980B9",
-  yellow:     "#D4A017",
+  yellow:     "#c49a14",
   purple:     "#7D5A9A",
-  sidebar:    "#2F3A1C",
-  sidebarText:"#C8D8A0",
-  sidebarActive:"#6F7F1F",
-  white:      "#FFFFFF",
-  shadow:     "rgba(47,58,28,0.12)",
+  sidebar:    "#14100c",
+  sidebarText:"#d4ece9",
+  sidebarActive:"#16a298",
+  white:      "#ffffff",
+  shadow:     "rgba(26,22,16,0.12)",
 };
 
 // ═══════════════════════════════════════════════════════════
@@ -1961,9 +1962,10 @@ function Schedule({ employees, role, empId: currentEmpId }) {
             Ορίσε ελάχιστο και μέγιστο αριθμό ημερών εργασίας ανά εβδομάδα για κάθε εργαζόμενο. Το αυτόματο πρόγραμμα τα λαμβάνει υπόψη.
           </div>
           <div style={{ maxHeight: 400, overflowY: "auto" }}>
-            {(employees || []).filter(e => e.role !== "partner").length === 0
+            {(employees || []).length === 0
               ? <div style={{ textAlign: "center", padding: 20, color: T.text3 }}>Δεν υπάρχουν εργαζόμενοι</div>
-              : (employees || []).filter(e => e.role !== "partner").map(emp => {
+              : (employees || []).map(emp => {
+                  const isPartner = emp.role === "partner";
                   const wd = workDays[emp.id] || { min: 3, max: 5 };
                   const update = (field, delta) => {
                     const cur = workDays[emp.id] || { min: 3, max: 5 };
@@ -1979,7 +1981,7 @@ function Schedule({ employees, role, empId: currentEmpId }) {
                       padding: "12px 0", borderBottom: `1px solid ${T.border}`
                     }}>
                       <div style={{ color: T.text, fontWeight: 600, fontSize: 14, minWidth: 120 }}>
-                        {emp.name} {emp.surname}
+                        {isPartner ? "⭐ " : ""}{emp.name} {emp.surname}
                       </div>
                       <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
                         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
