@@ -11,31 +11,31 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 //  THEME — Olive Garden 🌿
 // ═══════════════════════════════════════════════════════════
 const T = {
-  // Pipofire palette
-  bg:         "#fff8f8",
-  cat_bg:     "#fde0e4",
-  card:       "#ffffff",
-  price_bg:   "#C31936",
-  price_text: "#ffffff",
-  badge_bg:   "#F49B01",
-  badge_text: "#4a0a10",
+  // Mediterranean palette
+  bg:         "#F8F6F1",
+  cat_bg:     "#E7D8B5",
+  card:       "#EFE8DA",
+  price_bg:   "#F2C94C",
+  price_text: "#2F3A1C",
+  badge_bg:   "#A8B46A",
+  badge_text: "#2F3A1C",
   // extended palette
-  border:     "#f8c8cc",
-  accent:     "#C31936",
-  accent2:    "#d4203e",
-  text:       "#1a0408",
-  text2:      "#5a2030",
-  text3:      "#8a4050",
-  green:      "#2a8050",
-  red:        "#C31936",
+  border:     "#D6C9A8",
+  accent:     "#6F7F1F",
+  accent2:    "#8A9E28",
+  text:       "#2F3A1C",
+  text2:      "#6B6657",
+  text3:      "#9AAA78",
+  green:      "#4A7C28",
+  red:        "#C0392B",
   blue:       "#2980B9",
-  yellow:     "#F49B01",
+  yellow:     "#D4A017",
   purple:     "#7D5A9A",
-  sidebar:    "#1a0408",
-  sidebarText:"#fde0e4",
-  sidebarActive:"#C31936",
+  sidebar:    "#2F3A1C",
+  sidebarText:"#E7D8B5",
+  sidebarActive:"#6F7F1F",
   white:      "#ffffff",
-  shadow:     "rgba(26,4,8,0.12)",
+  shadow:     "rgba(47,58,28,0.12)",
 };
 
 // ═══════════════════════════════════════════════════════════
@@ -1506,27 +1506,31 @@ function Schedule({ employees, role, empId: currentEmpId }) {
   };
 
   const autoGenerate = () => {
-    if (!confirm("Αυτόματη δημιουργία;\n• Κλειδωμένες μέρες και χειροκίνητες επιλογές διατηρούνται.\n• Προστίθενται μόνο εργαζόμενοι που λείπουν για να συμπληρωθεί το πλήρωμα.")) return;
+    if (!confirm("Αυτόματη δημιουργία;\n• Χειροκίνητες επιλογές διατηρούνται.\n• Τηρούνται min/max ημέρες ανά εργαζόμενο.")) return;
     const currentWeek = schedule[weekKey] || {};
     const newSch = { ...currentWeek };
     const partners = (employees || []).filter(e => e.role === "partner");
     const partner1 = partners[0] || null;
     const partner2 = partners[1] || null;
+    const allNP = (employees || []).filter(e => e.role !== "partner");
 
-    // Count current week shifts per employee (before adding more)
-    const empWeekShifts = {};
+    // Count shifts already in the current week (manual or frozen)
+    const empShifts = {};
     weekDates.forEach(d => {
       SHIFTS_DEF.forEach(sh => {
         (currentWeek[d]?.[sh.id] || []).forEach(eid => {
-          empWeekShifts[eid] = (empWeekShifts[eid] || 0) + 1;
+          empShifts[eid] = (empShifts[eid] || 0) + 1;
         });
       });
     });
 
-    const atMax = (empId) => {
-      const wd = workDays[empId];
-      return wd && (empWeekShifts[empId] || 0) >= wd.max;
-    };
+    const getMax  = (empId) => workDays[empId]?.max ?? 7;
+    const getMin  = (empId) => workDays[empId]?.min ?? 0;
+    const atMax   = (empId) => (empShifts[empId] || 0) >= getMax(empId);
+    const addShift = (empId) => { empShifts[empId] = (empShifts[empId] || 0) + 1; };
+
+    // Sort available employees: those with fewest shifts first (ensures even distribution)
+    const byLoad = (arr) => [...arr].sort((a, b) => (empShifts[a.id] || 0) - (empShifts[b.id] || 0));
 
     weekDates.forEach(date => {
       if (isFrozen(date, "morning") && isFrozen(date, "night")) return;
@@ -1534,68 +1538,85 @@ function Schedule({ employees, role, empId: currentEmpId }) {
       const busyN = getBusy(date, "night");
       const minM  = 2 + busyM;
       const minN  = 2 + busyN;
-      const allNP = (employees || []).filter(e => e.role !== "partner");
-
-      // Start from existing crew (preserve manual assignments)
-      const morningCrew = [...(currentWeek[date]?.morning || [])];
-      const nightCrew   = [...(currentWeek[date]?.night   || [])];
       const frozenM = isFrozen(date, "morning");
 
-      const canAddM = (e) => !hasConstraint(e.id, date, "morning") && !hasRep(e.id, date) && !atMax(e.id);
-      const canAddN = (e) => !hasConstraint(e.id, date, "night")   && !hasRep(e.id, date) && !atMax(e.id);
+      // Preserve manual assignments
+      const morningCrew = [...(currentWeek[date]?.morning || [])];
+      const nightCrew   = [...(currentWeek[date]?.night   || [])];
 
+      const canM = (e) => !atMax(e.id) && !hasConstraint(e.id, date, "morning") && !hasRep(e.id, date) && !morningCrew.includes(e.id);
+      const canN = (e) => !atMax(e.id) && !hasConstraint(e.id, date, "night")   && !hasRep(e.id, date) && !nightCrew.includes(e.id);
+
+      // Partners
       const p2HasRep = partner2 && hasRep(partner2.id, date);
-
       if (!frozenM && partner1 && !hasRep(partner1.id, date) && !hasConstraint(partner1.id, date, "morning") && !morningCrew.includes(partner1.id)) {
-        morningCrew.push(partner1.id);
-        empWeekShifts[partner1.id] = (empWeekShifts[partner1.id] || 0) + 1;
+        morningCrew.push(partner1.id); addShift(partner1.id);
       }
       if (partner2 && !hasRep(partner2.id, date) && !hasConstraint(partner2.id, date, "night") && !nightCrew.includes(partner2.id)) {
-        nightCrew.push(partner2.id);
-        empWeekShifts[partner2.id] = (empWeekShifts[partner2.id] || 0) + 1;
+        nightCrew.push(partner2.id); addShift(partner2.id);
       }
       if (p2HasRep && partner1 && !hasRep(partner1.id, date) && !hasConstraint(partner1.id, date, "night") && !nightCrew.includes(partner1.id)) {
-        nightCrew.push(partner1.id);
-        empWeekShifts[partner1.id] = (empWeekShifts[partner1.id] || 0) + 1;
+        nightCrew.push(partner1.id); addShift(partner1.id);
         const idx = morningCrew.indexOf(partner1.id);
-        if (idx >= 0) { morningCrew.splice(idx, 1); empWeekShifts[partner1.id] = Math.max(0, (empWeekShifts[partner1.id] || 1) - 1); }
+        if (idx >= 0) { morningCrew.splice(idx, 1); empShifts[partner1.id] = Math.max(0, (empShifts[partner1.id] || 1) - 1); }
       }
 
-      const availM = allNP.filter(e => canAddM(e) && !morningCrew.includes(e.id));
-      const availN = allNP.filter(e => canAddN(e) && !nightCrew.includes(e.id));
+      // Helper: pick best available employee (fewest shifts first)
+      const pickM = (cond) => {
+        const e = byLoad(allNP.filter(e => canM(e) && !nightCrew.includes(e.id))).find(e => !cond || cond(e));
+        if (e) { morningCrew.push(e.id); addShift(e.id); }
+      };
+      const pickN = (cond) => {
+        const e = byLoad(allNP.filter(e => canN(e) && !morningCrew.includes(e.id))).find(e => !cond || cond(e));
+        if (e) { nightCrew.push(e.id); addShift(e.id); }
+      };
 
+      // Fill morning: abilities first, then fill to min
       if (!frozenM) {
-        const addM = (cond) => {
-          const e = availM.find(e => cond(e) && !morningCrew.includes(e.id));
-          if (e) { morningCrew.push(e.id); empWeekShifts[e.id] = (empWeekShifts[e.id] || 0) + 1; availM.splice(availM.indexOf(e), 1); }
-        };
         const hasMC = (ab) => morningCrew.some(id => (employees || []).find(e => e.id === id)?.abilities?.[ab]);
-        if (!hasMC("openShop"))   addM(e => e.abilities?.openShop);
-        if (!hasMC("makeCoffee")) addM(e => e.abilities?.makeCoffee);
-        if (!hasMC("delivery"))   addM(e => e.abilities?.delivery);
-        if (!hasMC("serve"))      addM(e => e.abilities?.serve);
+        if (!hasMC("openShop"))   pickM(e => e.abilities?.openShop);
+        if (!hasMC("makeCoffee")) pickM(e => e.abilities?.makeCoffee);
+        if (!hasMC("delivery"))   pickM(e => e.abilities?.delivery);
+        if (!hasMC("serve"))      pickM(e => e.abilities?.serve);
         while (morningCrew.length < minM) {
-          const e = availM.find(e => !morningCrew.includes(e.id) && !nightCrew.includes(e.id));
-          if (e) { morningCrew.push(e.id); empWeekShifts[e.id] = (empWeekShifts[e.id] || 0) + 1; availM.splice(availM.indexOf(e), 1); } else break;
+          const before = morningCrew.length;
+          pickM(null);
+          if (morningCrew.length === before) break;
         }
       }
 
-      const addN = (cond) => {
-        const e = availN.find(e => cond(e) && !nightCrew.includes(e.id) && !morningCrew.includes(e.id));
-        if (e) { nightCrew.push(e.id); empWeekShifts[e.id] = (empWeekShifts[e.id] || 0) + 1; availN.splice(availN.indexOf(e), 1); }
-      };
+      // Fill night: abilities first, then fill to min
       const hasNC = (ab) => nightCrew.some(id => (employees || []).find(e => e.id === id)?.abilities?.[ab]);
-      if (!hasNC("closeShop")) addN(e => e.abilities?.closeShop);
-      if (!hasNC("makeCoffee")) addN(e => e.abilities?.makeCoffee);
-      if (!hasNC("delivery"))   addN(e => e.abilities?.delivery);
-      if (!hasNC("serve"))      addN(e => e.abilities?.serve);
+      if (!hasNC("closeShop"))  pickN(e => e.abilities?.closeShop);
+      if (!hasNC("makeCoffee")) pickN(e => e.abilities?.makeCoffee);
+      if (!hasNC("delivery"))   pickN(e => e.abilities?.delivery);
+      if (!hasNC("serve"))      pickN(e => e.abilities?.serve);
       while (nightCrew.length < minN) {
-        const e = availN.find(e => !nightCrew.includes(e.id) && !morningCrew.includes(e.id));
-        if (e) { nightCrew.push(e.id); empWeekShifts[e.id] = (empWeekShifts[e.id] || 0) + 1; availN.splice(availN.indexOf(e), 1); } else break;
+        const before = nightCrew.length;
+        pickN(null);
+        if (nightCrew.length === before) break;
       }
 
       newSch[date] = { ...currentWeek[date], morning: morningCrew, night: nightCrew };
     });
+
+    // Second pass: try to give min days to employees who haven't reached their minimum
+    // by adding them to days where they're available and the crew isn't frozen
+    weekDates.forEach(date => {
+      SHIFTS_DEF.forEach(sh => {
+        if (isFrozen(date, sh.id)) return;
+        allNP
+          .filter(e => (empShifts[e.id] || 0) < getMin(e.id))
+          .filter(e => !hasConstraint(e.id, date, sh.id) && !hasRep(e.id, date))
+          .filter(e => !(newSch[date]?.[sh.id] || []).includes(e.id))
+          .filter(e => !(newSch[date]?.[sh.id === "morning" ? "night" : "morning"] || []).includes(e.id))
+          .forEach(e => {
+            newSch[date] = { ...newSch[date], [sh.id]: [...(newSch[date]?.[sh.id] || []), e.id] };
+            addShift(e.id);
+          });
+      });
+    });
+
     setSchedule(s => ({ ...s, [weekKey]: newSch }));
   };
 
