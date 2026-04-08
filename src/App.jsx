@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { createClient } from '@supabase/supabase-js';
 
-// === SUPABASE CONFIG - CHANGE THESE  ===
+// === SUPABASE CONFIG - CHANGE THESE ===
 const SUPABASE_URL = "https://tymgwcprvuqjderxfagd.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR5bWd3Y3BydnVxamRlcnhmYWdkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2NTYyOTAsImV4cCI6MjA5MTIzMjI5MH0.03tCcE89WslCNADDoaEf8uX_kvvOU6j4maCM-7CdBuE";
 
@@ -231,57 +231,6 @@ function PageHeader({ title, subtitle, actions }) {
       </div>
       {actions && <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>{actions}</div>}
     </div>
-  );
-}
-
-// ═══════════════════════════════════════════════════════════
-//  BACKUP / RESTORE
-// ═══════════════════════════════════════════════════════════
-function BackupRestore() {
-  const [msg, setMsg] = useState("");
-  const fileRef = useRef();
-
-  const doBackup = async () => {
-    const data = await idb.exportAll();
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url; a.download = `briki_backup_${todayISO()}.json`; a.click();
-    URL.revokeObjectURL(url);
-    setMsg("✅ Backup κατεβήκε!");
-    setTimeout(() => setMsg(""), 3000);
-  };
-
-  const doRestore = (e) => {
-    const file = e.target.files[0]; if (!file) return;
-    const reader = new FileReader();
-    reader.onload = async (ev) => {
-      try {
-        const data = JSON.parse(ev.target.result);
-        await idb.importAll(data);
-        setMsg("✅ Επαναφορά επιτυχής! Ανανέωσε τη σελίδα.");
-        setTimeout(() => setMsg(""), 5000);
-      } catch { setMsg("❌ Σφάλμα αρχείου"); setTimeout(() => setMsg(""), 3000); }
-    };
-    reader.readAsText(file);
-    e.target.value = "";
-  };
-
-  return (
-    <Card style={{ marginBottom: 20, background: T.cat_bg }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
-        <div>
-          <div style={{ color: T.text, fontWeight: 700, fontFamily: "Georgia, serif", fontSize: 15 }}>💾 Βάση Δεδομένων (IndexedDB)</div>
-          <div style={{ color: T.text2, fontSize: 12, fontFamily: "'Trebuchet MS', sans-serif", marginTop: 2 }}>Τα δεδομένα αποθηκεύονται τοπικά στο browser</div>
-        </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <Btn onClick={doBackup} bg={T.green} small>⬇️ Backup</Btn>
-          <Btn onClick={() => fileRef.current.click()} bg={T.blue} small>⬆️ Επαναφορά</Btn>
-          <input ref={fileRef} type="file" accept=".json" onChange={doRestore} style={{ display: "none" }} />
-        </div>
-      </div>
-      {msg && <div style={{ marginTop: 10, color: T.green, fontWeight: 700, fontSize: 13 }}>{msg}</div>}
-    </Card>
   );
 }
 
@@ -1965,76 +1914,6 @@ function Links({ links, setLinks, role }) {
     </div>
   );
 }
-
-// ═══════════════════════════════════════════════════════════
-//  MAIN APP — IDB-backed state
-// ═══════════════════════════════════════════════════════════
-export default function App() {
-  const [page, setPage] = useState("login");
-  const [role, setRole] = useState(null);
-  const [userName, setUserName] = useState("");
-  const [empId, setEmpId] = useState(null);
-
-  const [employees,    setEmployees,    empLoaded]    = useIDB("employees",   "list",   []);
-  const [attendance,   setAttendance,   attLoaded]    = useIDB("attendance",  "list",   []);
-  const [dailyData,    setDailyData,    ddLoaded]     = useIDB("dailyData",   "data",   {});
-  const [initBalances, setInitBalances, ibLoaded]     = useIDB("settings",    "initBalances", { kouti: 0, trapeza: 0 });
-  const [althData,     setAlthData,     althLoaded]   = useIDB("althData",    "list",   []);
-  const [affiliates,   setAffiliates,   affLoaded]    = useIDB("affiliates",  "list",   []);
-  const [links,        setLinks,        linksLoaded]  = useIDB("links",       "list",   []);
-
-  const allLoaded = empLoaded && attLoaded && ddLoaded && ibLoaded && althLoaded && affLoaded && linksLoaded;
-
-  const nav = (p) => setPage(p);
-
-  if (page === "login") return (
-    <Login onLogin={(r, n, eid) => { setRole(r); setUserName(n); setEmpId(eid || null); setPage(r === "employee" ? "attendance" : "dashboard"); }} />
-  );
-
-  if (!allLoaded) return (
-    <div style={{ minHeight: "100vh", background: T.bg, display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <div style={{ color: T.text2, fontSize: 16 }}>🌿 Φόρτωση...</div>
-    </div>
-  );
-
-  const ctx = { role, userName, empId, employees, setEmployees, attendance, setAttendance, dailyData, setDailyData, initBalances, setInitBalances, althData, setAlthData, affiliates, setAffiliates, links, setLinks, nav };
-
-  const pages = {
-    dashboard: <Dashboard {...ctx} />,
-    cash:      <Cash {...ctx} />,
-    accounts:  <Accounts {...ctx} />,
-    affiliates:<Affiliates {...ctx} />,
-    employees: <Employees {...ctx} />,
-    attendance:<Attendance {...ctx} />,
-    schedule:  <Schedule {...ctx} />,
-    reports:   <Reports {...ctx} />,
-    alth:      <ALTH {...ctx} />,
-    links:     <Links {...ctx} role={role} />,
-  };
-
-  return (
-    <div style={{ display: "flex", minHeight: "100vh", background: T.bg }}>
-      <Sidebar page={page} nav={nav} role={role} userName={userName} onLogout={() => { setRole(null); setUserName(""); setPage("login"); }} />
-      <div style={{ flex: 1, overflow: "auto", minWidth: 0 }}>
-        {/* Backup banner for admin */}
-
-        {role !== "employee" && page === "dashboard" && (
-  <div style={{ padding: "16px 24px 0" }}>
-    <BackupRestore 
-      onSync={async () => {
-        const data = await idb.exportAll();
-        return await syncToSupabase(data);
-      }} 
-      onRestore={restoreFromSupabase} 
-    />
-  </div>
-)}
-        {pages[page] || <div style={{ padding: 24, color: T.text2 }}>Σελίδα δεν βρέθηκε</div>}
-      </div>
-    </div>
-  );
-}
-
 
 // ═══════════════════════════════════════════════════════════
 // SUPABASE SYNC FUNCTIONS (Hybrid)
