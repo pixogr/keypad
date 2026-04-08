@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { createClient } from '@supabase/supabase-js';
 
-// === SUPABASE CONFIG - CHANGE THESE ===
+// === SUPABASE CONFIG - CHANGE THESE  ===
 const SUPABASE_URL = "https://tymgwcprvuqjderxfagd.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR5bWd3Y3BydnVxamRlcnhmYWdkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2NTYyOTAsImV4cCI6MjA5MTIzMjI5MH0.03tCcE89WslCNADDoaEf8uX_kvvOU6j4maCM-7CdBuE";
 
