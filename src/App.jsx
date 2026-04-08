@@ -2118,4 +2118,3 @@ function BackupRestore({ onSync, onRestore }) {
     </Card>
   );
 }
-
