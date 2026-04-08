@@ -38,85 +38,55 @@ const T = {
 };
 
 // ═══════════════════════════════════════════════════════════
-//  DATABASE — IndexedDB-backed storage with localStorage fallback
+//  DATABASE — Supabase cloud storage (app_data table)
 // ═══════════════════════════════════════════════════════════
-const DB_NAME = "BrikiDB";
-const DB_VERSION = 1;
-const STORES = ["settings", "employees", "attendance", "dailyData", "schedule", "busyDays", "links", "althData", "affiliates", "cashRegisters", "daysOff"];
-
-let _db = null;
-const getDB = () => new Promise((resolve, reject) => {
-  if (_db) return resolve(_db);
-  const req = indexedDB.open(DB_NAME, DB_VERSION);
-  req.onupgradeneeded = (e) => {
-    const db = e.target.result;
-    STORES.forEach(s => { if (!db.objectStoreNames.contains(s)) db.createObjectStore(s); });
-  };
-  req.onsuccess = (e) => { _db = e.target.result; resolve(_db); };
-  req.onerror = () => reject(req.error);
-});
-
-const idb = {
+const db = {
   get: async (store, key) => {
-    try {
-      const db = await getDB();
-      return new Promise((res, rej) => {
-        const tx = db.transaction(store, "readonly");
-        const req = tx.objectStore(store).get(key);
-        req.onsuccess = () => res(req.result ?? null);
-        req.onerror = () => rej(req.error);
-      });
-    } catch { return localStorage.getItem(`briki_${store}_${key}`) ? JSON.parse(localStorage.getItem(`briki_${store}_${key}`)) : null; }
+    const { data } = await supabase
+      .from('app_data')
+      .select('value')
+      .eq('store', store)
+      .eq('key', key)
+      .maybeSingle();
+    return data?.value ?? null;
   },
   set: async (store, key, val) => {
-    try {
-      const db = await getDB();
-      return new Promise((res, rej) => {
-        const tx = db.transaction(store, "readwrite");
-        tx.objectStore(store).put(val, key);
-        tx.oncomplete = () => res();
-        tx.onerror = () => rej(tx.error);
-      });
-    } catch { localStorage.setItem(`briki_${store}_${key}`, JSON.stringify(val)); }
-  },
-  getAll: async (store) => {
-    try {
-      const db = await getDB();
-      return new Promise((res, rej) => {
-        const tx = db.transaction(store, "readonly");
-        const results = {};
-        const req = tx.objectStore(store).openCursor();
-        req.onsuccess = (e) => {
-          const cursor = e.target.result;
-          if (cursor) { results[cursor.key] = cursor.value; cursor.continue(); }
-          else res(results);
-        };
-        req.onerror = () => rej(req.error);
-      });
-    } catch { return {}; }
+    await supabase
+      .from('app_data')
+      .upsert({ store, key, value: val, updated_at: new Date().toISOString() }, { onConflict: 'store,key' });
   },
   exportAll: async () => {
-    const data = {};
-    for (const store of STORES) data[store] = await idb.getAll(store);
-    return data;
+    const { data } = await supabase.from('app_data').select('store, key, value');
+    const result = {};
+    (data || []).forEach(({ store, key, value }) => {
+      if (!result[store]) result[store] = {};
+      result[store][key] = value;
+    });
+    return result;
   },
   importAll: async (data) => {
+    const rows = [];
     for (const [store, entries] of Object.entries(data)) {
-      for (const [key, val] of Object.entries(entries || {})) await idb.set(store, key, val);
+      for (const [key, value] of Object.entries(entries || {})) {
+        rows.push({ store, key, value, updated_at: new Date().toISOString() });
+      }
+    }
+    if (rows.length > 0) {
+      await supabase.from('app_data').upsert(rows, { onConflict: 'store,key' });
     }
   }
 };
 
-function useIDB(store, key, def) {
+function useCloud(store, key, def) {
   const [val, setVal] = useState(def);
   const [loaded, setLoaded] = useState(false);
   useEffect(() => {
-    idb.get(store, key).then(v => { if (v !== null) setVal(v); setLoaded(true); });
+    db.get(store, key).then(v => { if (v !== null) setVal(v); setLoaded(true); });
   }, [store, key]);
   const update = useCallback(async (v) => {
     const nv = typeof v === "function" ? v(val) : v;
     setVal(nv);
-    await idb.set(store, key, nv);
+    await db.set(store, key, nv);
   }, [store, key, val]);
   return [val, update, loaded];
 }
@@ -243,7 +213,7 @@ function Login({ onLogin }) {
   const [empId, setEmpId] = useState("");
   const [err, setErr] = useState("");
   const [employees, setEmployees] = useState([]);
-  useEffect(() => { idb.get("employees", "list").then(v => setEmployees(v || [])); }, []);
+  useEffect(() => { db.get("employees", "list").then(v => setEmployees(v || [])); }, []);
 
   const handleAdmin = () => {
     if (pin === ADMIN_PIN) onLogin("admin", "Admin");
@@ -1916,108 +1886,51 @@ function Links({ links, setLinks, role }) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// SUPABASE SYNC FUNCTIONS (Hybrid)
+//  BACKUP — JSON export/import (data lives in Supabase)
 // ═══════════════════════════════════════════════════════════
-const syncToSupabase = async () => {
-  try {
-    const data = await idb.exportAll();
-
-    // Sync Employees
-    if (data.employees) {
-      const employeesArray = Object.values(data.employees);
-      for (const emp of employeesArray) {
-        await supabase.from('employees').upsert(emp, { onConflict: 'id' });
-      }
-    }
-
-    // Sync Attendance
-    if (data.attendance) {
-      const attArray = Object.values(data.attendance);
-      for (const att of attArray) {
-        await supabase.from('attendance').upsert(att, { onConflict: 'id' });
-      }
-    }
-
-    // Sync Daily Data
-    if (data.dailyData) {
-      for (const [date, row] of Object.entries(data.dailyData)) {
-        await supabase.from('daily_data').upsert({ date, ...row }, { onConflict: 'date' });
-      }
-    }
-
-    console.log("✅ Successfully synced to Supabase");
-    return true;
-  } catch (error) {
-    console.error("Sync failed:", error);
-    return false;
-  }
-};
-
-const restoreFromSupabase = async (setEmployees, setAttendance, setDailyData) => {
-  try {
-    const { data: emps } = await supabase.from('employees').select('*');
-    const { data: atts } = await supabase.from('attendance').select('*');
-    const { data: dailyRows } = await supabase.from('daily_data').select('*');
-
-    const dailyObj = {};
-    dailyRows.forEach(row => {
-      dailyObj[row.date] = row;
-    });
-
-    // Import back to IndexedDB
-    await idb.importAll({
-      employees: emps.reduce((acc, e) => { acc[e.id] = e; return acc; }, {}),
-      attendance: atts.reduce((acc, a) => { acc[a.id] = a; return acc; }, {}),
-      dailyData: dailyObj
-    });
-
-    // Update state
-    setEmployees(emps);
-    setAttendance(atts);
-    setDailyData(dailyObj);
-
-    alert("✅ Data successfully restored from Supabase!");
-    return true;
-  } catch (error) {
-    alert("Restore failed: " + error.message);
-    console.error(error);
-    return false;
-  }
-};
-
-// Updated BackupRestore with Cloud Sync
-function BackupRestore({ onSync, onRestore }) {
+function BackupRestore() {
   const [msg, setMsg] = useState("");
+  const fileRef = useRef();
 
-  const doBackup = async () => {
-    const data = await idb.exportAll();
+  const doExport = async () => {
+    setMsg("⏳ Εξαγωγή...");
+    const data = await db.exportAll();
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url; a.download = `briki_backup_${todayISO()}.json`; a.click();
     URL.revokeObjectURL(url);
-    setMsg("✅ Local Backup downloaded!");
+    setMsg("✅ Backup κατεβήκε!");
     setTimeout(() => setMsg(""), 3000);
   };
 
-  const doSync = async () => {
-    setMsg("☁️ Syncing to Supabase...");
-    const success = await onSync();
-    setMsg(success ? "✅ Synced successfully to cloud!" : "❌ Sync failed");
-    setTimeout(() => setMsg(""), 4000);
+  const doImport = (e) => {
+    const file = e.target.files[0]; if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      try {
+        setMsg("⏳ Εισαγωγή...");
+        const data = JSON.parse(ev.target.result);
+        await db.importAll(data);
+        setMsg("✅ Επαναφορά επιτυχής! Ανανέωσε τη σελίδα.");
+        setTimeout(() => setMsg(""), 5000);
+      } catch { setMsg("❌ Σφάλμα αρχείου"); setTimeout(() => setMsg(""), 3000); }
+    };
+    reader.readAsText(file);
+    e.target.value = "";
   };
 
   return (
     <Card style={{ marginBottom: 20, background: T.cat_bg }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
         <div>
-          <div style={{ color: T.text, fontWeight: 700, fontFamily: "Georgia, serif", fontSize: 15 }}>💾 Local + Cloud Backup</div>
-          <div style={{ color: T.text2, fontSize: 12 }}>IndexedDB + Supabase</div>
+          <div style={{ color: T.text, fontWeight: 700, fontFamily: "Georgia, serif", fontSize: 15 }}>☁️ Supabase Cloud</div>
+          <div style={{ color: T.text2, fontSize: 12, fontFamily: "'Trebuchet MS', sans-serif" }}>Τα δεδομένα αποθηκεύονται αυτόματα στο cloud</div>
         </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <Btn onClick={doBackup} bg={T.green} small>⬇️ Local Backup</Btn>
-          <Btn onClick={doSync} bg={T.accent} small>☁️ Sync to Cloud</Btn>
-          <Btn onClick={onRestore} bg={T.blue} small>☁️ Restore from Cloud</Btn>
+        <div style={{ display: "flex", gap: 8 }}>
+          <Btn onClick={doExport} bg={T.green} small>⬇️ Export JSON</Btn>
+          <Btn onClick={() => fileRef.current.click()} bg={T.blue} small>⬆️ Import JSON</Btn>
+          <input ref={fileRef} type="file" accept=".json" onChange={doImport} style={{ display: "none" }} />
         </div>
       </div>
       {msg && <div style={{ marginTop: 10, color: T.green, fontWeight: 700, fontSize: 13 }}>{msg}</div>}
@@ -2025,51 +1938,55 @@ function BackupRestore({ onSync, onRestore }) {
   );
 }
 
-// Main App with Sync integration
+// ═══════════════════════════════════════════════════════════
+//  MAIN APP
+// ═══════════════════════════════════════════════════════════
 export default function App() {
   const [page, setPage] = useState("login");
   const [role, setRole] = useState(null);
   const [userName, setUserName] = useState("");
   const [empId, setEmpId] = useState(null);
 
-  const [employees, setEmployees, empLoaded] = useIDB("employees", "list", []);
-  const [attendance, setAttendance, attLoaded] = useIDB("attendance", "list", []);
-  const [dailyData, setDailyData, ddLoaded] = useIDB("dailyData", "data", {});
-  const [initBalances, setInitBalances, ibLoaded] = useIDB("settings", "initBalances", { kouti: 0, trapeza: 0 });
-  const [althData, setAlthData, althLoaded] = useIDB("althData", "list", []);
-  const [affiliates, setAffiliates, affLoaded] = useIDB("affiliates", "list", []);
-  const [links, setLinks, linksLoaded] = useIDB("links", "list", []);
+  const [employees,    setEmployees,    empLoaded]  = useCloud("employees",  "list",   []);
+  const [attendance,   setAttendance,   attLoaded]  = useCloud("attendance", "list",   []);
+  const [dailyData,    setDailyData,    ddLoaded]   = useCloud("dailyData",  "data",   {});
+  const [initBalances, setInitBalances, ibLoaded]   = useCloud("settings",   "initBalances", { kouti: 0, trapeza: 0 });
+  const [althData,     setAlthData,     althLoaded] = useCloud("althData",   "list",   []);
+  const [affiliates,   setAffiliates,   affLoaded]  = useCloud("affiliates", "list",   []);
+  const [links,        setLinks,        linksLoaded]= useCloud("links",      "list",   []);
 
   const allLoaded = empLoaded && attLoaded && ddLoaded && ibLoaded && althLoaded && affLoaded && linksLoaded;
 
   const nav = (p) => setPage(p);
 
   if (page === "login") {
-    return <Login onLogin={(r, n, eid) => { 
-      setRole(r); setUserName(n); setEmpId(eid || null); 
-      setPage(r === "employee" ? "attendance" : "dashboard"); 
+    return <Login onLogin={(r, n, eid) => {
+      setRole(r); setUserName(n); setEmpId(eid || null);
+      setPage(r === "employee" ? "attendance" : "dashboard");
     }} />;
   }
 
   if (!allLoaded) {
-    return <div style={{ minHeight: "100vh", background: T.bg, display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <div style={{ color: T.text2, fontSize: 16 }}>🌿 Φόρτωση...</div>
-    </div>;
+    return (
+      <div style={{ minHeight: "100vh", background: T.bg, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ color: T.text2, fontSize: 16 }}>🌿 Φόρτωση...</div>
+      </div>
+    );
   }
 
   const ctx = { role, userName, empId, employees, setEmployees, attendance, setAttendance, dailyData, setDailyData, initBalances, setInitBalances, althData, setAlthData, affiliates, setAffiliates, links, setLinks, nav };
 
   const pages = {
-    dashboard: <Dashboard {...ctx} />,
-    cash: <Cash {...ctx} />,
-    accounts: <Accounts {...ctx} />,
+    dashboard:  <Dashboard {...ctx} />,
+    cash:       <Cash {...ctx} />,
+    accounts:   <Accounts {...ctx} />,
     affiliates: <Affiliates {...ctx} />,
-    employees: <Employees {...ctx} />,
+    employees:  <Employees {...ctx} />,
     attendance: <Attendance {...ctx} />,
-    schedule: <Schedule {...ctx} />,
-    reports: <Reports {...ctx} />,
-    alth: <ALTH {...ctx} />,
-    links: <Links {...ctx} role={role} />,
+    schedule:   <Schedule {...ctx} />,
+    reports:    <Reports {...ctx} />,
+    alth:       <ALTH {...ctx} />,
+    links:      <Links {...ctx} role={role} />,
   };
 
   return (
@@ -2078,10 +1995,7 @@ export default function App() {
       <div style={{ flex: 1, overflow: "auto", minWidth: 0 }}>
         {role !== "employee" && page === "dashboard" && (
           <div style={{ padding: "16px 24px 0" }}>
-            <BackupRestore 
-              onSync={syncToSupabase}
-              onRestore={() => restoreFromSupabase(setEmployees, setAttendance, setDailyData)}
-            />
+            <BackupRestore />
           </div>
         )}
         {pages[page] || <div style={{ padding: 24, color: T.text2 }}>Σελίδα δεν βρέθηκε</div>}
