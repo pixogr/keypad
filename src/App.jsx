@@ -11,31 +11,31 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 //  THEME — Olive Garden 🌿
 // ═══════════════════════════════════════════════════════════
 const T = {
-  // Aegean palette
-  bg:         "#faf7f2",
-  cat_bg:     "#ede8df",
-  card:       "#f4f0e8",
-  price_bg:   "#16a298",
+  // Pipofire palette
+  bg:         "#fff8f8",
+  cat_bg:     "#fde0e4",
+  card:       "#ffffff",
+  price_bg:   "#C31936",
   price_text: "#ffffff",
-  badge_bg:   "#d4ece9",
-  badge_text: "#0a4a46",
+  badge_bg:   "#F49B01",
+  badge_text: "#4a0a10",
   // extended palette
-  border:     "#ddd5c8",
-  accent:     "#16a298",
-  accent2:    "#1ab8ac",
-  text:       "#1a1610",
-  text2:      "#5a4a3a",
-  text3:      "#8a7a68",
-  green:      "#0e8575",
-  red:        "#C0392B",
+  border:     "#f8c8cc",
+  accent:     "#C31936",
+  accent2:    "#d4203e",
+  text:       "#1a0408",
+  text2:      "#5a2030",
+  text3:      "#8a4050",
+  green:      "#2a8050",
+  red:        "#C31936",
   blue:       "#2980B9",
-  yellow:     "#c49a14",
+  yellow:     "#F49B01",
   purple:     "#7D5A9A",
-  sidebar:    "#14100c",
-  sidebarText:"#d4ece9",
-  sidebarActive:"#16a298",
+  sidebar:    "#1a0408",
+  sidebarText:"#fde0e4",
+  sidebarActive:"#C31936",
   white:      "#ffffff",
-  shadow:     "rgba(26,22,16,0.12)",
+  shadow:     "rgba(26,4,8,0.12)",
 };
 
 // ═══════════════════════════════════════════════════════════
@@ -1605,21 +1605,32 @@ function Schedule({ employees, role, empId: currentEmpId }) {
     <div style={{ padding: 24 }}>
       <PageHeader title="📅 Εβδομαδιαίο Πρόγραμμα"
         actions={
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <Btn onClick={() => setShowConstraints(true)} small bg={T.red} style={{ opacity: 0.85 }}>
-              🚫 {role === "employee" ? "Αδυναμία μου" : "Αδυναμίες"}
-            </Btn>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-end" }}>
+            {/* Row 1: Personnel */}
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+              <Btn onClick={() => setShowConstraints(true)} small bg={T.red} style={{ opacity: 0.85 }}>
+                🚫 {role === "employee" ? "Αδυναμία μου" : "Αδυναμίες"}
+              </Btn>
+              {role !== "employee" && (
+                <>
+                  <Btn onClick={() => setShowRep(true)} small bg={T.purple} style={{ opacity: 0.85 }}>🛌 Ρεπό</Btn>
+                  <Btn onClick={() => setShowWorkDays(true)} small bg={T.yellow} style={{ color: T.badge_text }}>👥 Ημέρες</Btn>
+                </>
+              )}
+            </div>
+            {/* Row 2: Schedule tools (admin only) */}
             {role !== "employee" && (
-              <>
-                <Btn onClick={() => setShowRep(true)} small bg={T.purple} style={{ opacity: 0.85 }}>🛌 Ρεπό</Btn>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
                 <Btn onClick={() => setShowBusy(true)} small bg={T.cat_bg} style={{ border: `1px solid ${T.border}`, color: T.text }}>⚙️ Πολυσύχναστες</Btn>
-                <Btn onClick={() => setShowWorkDays(true)} small bg={T.yellow}>👥 Ημέρες</Btn>
                 <Btn onClick={autoGenerate} small>🤖 Αυτόματο</Btn>
                 <Btn onClick={clearWeek} small bg={T.red}>🗑️ Καθαρισμός</Btn>
-              </>
+              </div>
             )}
-            <Btn onClick={printSchedule} small bg={T.cat_bg} style={{ border: `1px solid ${T.border}`, color: T.text }}>🖨️ Εκτύπωση</Btn>
-            <Btn onClick={shareSchedule} small bg={T.blue}>📤 Κοινοποίηση</Btn>
+            {/* Row 3: Output */}
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+              <Btn onClick={printSchedule} small bg={T.cat_bg} style={{ border: `1px solid ${T.border}`, color: T.text }}>🖨️ Εκτύπωση</Btn>
+              <Btn onClick={shareSchedule} small bg={T.blue}>📤 Κοινοποίηση</Btn>
+            </div>
           </div>
         } />
 
