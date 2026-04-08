@@ -1414,7 +1414,18 @@ function Schedule({ employees, role, empId: currentEmpId }) {
 
   const confirmAdd = (time) => {
     if (!pendingAdd) return;
-    const { date, shiftId, empId } = pendingAdd;
+    const { date, shiftId, empId, editOnly } = pendingAdd;
+    if (editOnly) {
+      // Only update arrival time for an already-assigned employee
+      setSchedule(s => {
+        const dayData = s[weekKey]?.[date] || {};
+        const arr = { ...(dayData[shiftId+"_arr"] || {}) };
+        if (time) arr[empId] = time; else delete arr[empId];
+        return { ...s, [weekKey]: { ...(s[weekKey]||{}), [date]: { ...dayData, [shiftId+"_arr"]: arr } } };
+      });
+      setPendingAdd(null);
+      return;
+    }
     const cur = getSlot(date, shiftId);
     setSchedule(s => {
       const dayData = s[weekKey]?.[date] || {};
@@ -1735,9 +1746,16 @@ function Schedule({ employees, role, empId: currentEmpId }) {
                           borderRadius: 4, padding: "3px 6px", marginBottom: 3, fontSize: 12,
                           border: isConstrained ? `1px solid ${T.red}` : "none"
                         }}>
-                          <span style={{ color: isPartner ? "#B8860B" : T.text, fontWeight: isPartner ? 700 : 400 }}>
+                          <span
+                            onClick={role !== "employee" && !frozen ? () => setPendingAdd({ date, shiftId: shift.id, empId: emp.id, editOnly: true }) : undefined}
+                            style={{ color: isPartner ? "#B8860B" : T.text, fontWeight: isPartner ? 700 : 400, cursor: role !== "employee" && !frozen ? "pointer" : "default" }}
+                            title={role !== "employee" && !frozen ? "Κλικ για ώρα άφιξης" : undefined}
+                          >
                             {emp.name}{isConstrained ? " ⚠️" : ""}
-                            {arrival && <span style={{ fontSize: 10, opacity: 0.65, marginLeft: 4 }}>{arrival}</span>}
+                            {arrival
+                              ? <span style={{ fontSize: 10, background: T.accent, color: "#fff", borderRadius: 3, padding: "1px 4px", marginLeft: 5, fontWeight: 700 }}>{arrival}</span>
+                              : role !== "employee" && !frozen && <span style={{ fontSize: 9, opacity: 0.4, marginLeft: 4 }}>+ώρα</span>
+                            }
                           </span>
                           {role !== "employee" && !frozen && (
                             <button onClick={() => toggleEmp(date, shift.id, emp.id)}
@@ -1812,24 +1830,32 @@ function Schedule({ employees, role, empId: currentEmpId }) {
       {pendingAdd && (() => {
         const emp = (employees||[]).find(e => e.id === pendingAdd.empId);
         const times = arrivalTimes(pendingAdd.shiftId);
+        const curArrival = getArrival(pendingAdd.date, pendingAdd.shiftId, pendingAdd.empId);
         return (
           <Modal title={`⏰ Ώρα Άφιξης — ${emp?.name || ""}`} onClose={() => setPendingAdd(null)}>
             <div style={{ color: T.text2, fontSize: 13, marginBottom: 16, fontFamily: "'Trebuchet MS', sans-serif" }}>
               {pendingAdd.shiftId === "morning" ? "☀️ Πρωινή βάρδια (06:30 – 10:00)" : "🌙 Βραδινή βάρδια (15:00 – 20:00)"}
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 10, justifyContent: "center", marginBottom: 8 }}>
-              {times.map(t => (
-                <button key={t} onClick={() => confirmAdd(t)} style={{
-                  background: T.white, border: `2px solid ${T.border}`, borderRadius: 10,
-                  padding: "16px 14px", cursor: "pointer", fontSize: 18, fontWeight: 700,
-                  fontFamily: "Georgia, serif", color: T.text, minWidth: 80, textAlign: "center"
-                }}
-                  onMouseEnter={e => { e.currentTarget.style.borderColor = T.accent; e.currentTarget.style.background = "#F0F4E8"; }}
-                  onMouseLeave={e => { e.currentTarget.style.borderColor = T.border; e.currentTarget.style.background = T.white; }}
-                >{t}</button>
-              ))}
+              {times.map(t => {
+                const isSelected = t === curArrival;
+                return (
+                  <button key={t} onClick={() => confirmAdd(t)} style={{
+                    background: isSelected ? T.accent : T.white,
+                    border: `2px solid ${isSelected ? T.accent : T.border}`,
+                    borderRadius: 10, padding: "16px 14px", cursor: "pointer",
+                    fontSize: 18, fontWeight: 700, fontFamily: "Georgia, serif",
+                    color: isSelected ? "#fff" : T.text, minWidth: 80, textAlign: "center"
+                  }}
+                    onMouseEnter={e => { if (!isSelected) { e.currentTarget.style.borderColor = T.accent; e.currentTarget.style.background = T.cat_bg; } }}
+                    onMouseLeave={e => { if (!isSelected) { e.currentTarget.style.borderColor = T.border; e.currentTarget.style.background = T.white; } }}
+                  >{t}</button>
+                );
+              })}
             </div>
-            <Btn onClick={() => confirmAdd("")} bg={T.cat_bg} style={{ width: "100%", marginTop: 8, border: `1px solid ${T.border}`, color: T.text2 }}>Χωρίς ώρα άφιξης</Btn>
+            <Btn onClick={() => confirmAdd("")} bg={T.cat_bg} style={{ width: "100%", marginTop: 8, border: `1px solid ${T.border}`, color: T.text2 }}>
+              {curArrival ? "✕ Αφαίρεση ώρας άφιξης" : "Χωρίς ώρα άφιξης"}
+            </Btn>
           </Modal>
         );
       })()}
@@ -1837,7 +1863,7 @@ function Schedule({ employees, role, empId: currentEmpId }) {
       {showBusy && (
         <Modal title="⚙️ Πολυσύχναστες Μέρες" onClose={() => setShowBusy(false)} wide>
           <div style={{ color: T.text2, fontSize: 13, marginBottom: 12 }}>
-            Ορίσε επίπεδο κίνησης <b>ανά βάρδια</b>. Κάθε επίπεδο προσθέτει +1 άτομο στο ελάχιστο πλήρωμα (base: 2).
+            Ορίσε επίπεδο κίνησης <b>ανά βάρδια</b>. Κάθε επίπεδο προσθέτει +1 άτομο στο ελάχιστο προσωπικό (base: 2).
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 8 }}>
             <div style={{ color: T.text2, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 }}>Ημέρα</div>
