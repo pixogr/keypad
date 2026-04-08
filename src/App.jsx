@@ -1161,8 +1161,8 @@ function Affiliates({ affiliates, setAffiliates }) {
 //  SCHEDULE — Smart auto-schedule with constraints + ρεπό
 // ═══════════════════════════════════════════════════════════
 const SHIFTS_DEF = [
-  { id: "morning", label: "Πρωί", time: "06:30–14:30" },
-  { id: "night",   label: "Βράδυ", time: "14:30–22:30" }
+  { id: "morning", label: "Πρωί",  time: "07:00–15:00" },
+  { id: "night",   label: "Βράδυ", time: "16:00–00:00" }
 ];
 
 const getMonday = (d) => {
@@ -1174,6 +1174,87 @@ const isPastDay  = (dateISO) => dateISO < isoToday();
 const isFrozen   = (dateISO, shift) =>
   isPastDay(dateISO) || (dateISO === isoToday() && shift === "morning");
 
+function buildScheduleHTML({ employees, weekDates, getSlot, dayOff, forMobile }) {
+  const DAYS_SHORT = ["Δευ","Τρι","Τετ","Πεμ","Παρ","Σαβ","Κυρ"];
+  const DAYS_FULL  = ["Δευτέρα","Τρίτη","Τετάρτη","Πέμπτη","Παρασκευή","Σάββατο","Κυριακή"];
+  const empName = (id) => { const e = (employees||[]).find(e=>e.id===id); return e ? e.name : id; };
+  const repEmps = (date) => (dayOff||[]).filter(r=>r.date===date).map(r=>empName(r.empId));
+  const d2s = (iso) => iso.slice(8)+"/"+iso.slice(5,7);
+  const weekLabel = `${d2s(weekDates[0])} – ${d2s(weekDates[6])}`;
+
+  if (forMobile) {
+    const cards = weekDates.map((date, i) => {
+      const m = getSlot(date,"morning").map(empName);
+      const n = getSlot(date,"night").map(empName);
+      const reps = repEmps(date);
+      return `<div class="card">
+  <div class="day-head"><span class="day-name">${DAYS_FULL[i]}</span><span class="day-date">${d2s(date)}</span></div>
+  <div class="shift"><div class="sl">☀️ 07:00–15:00</div><div class="emps">${m.length?m.map(n=>`<span class="emp">${n}</span>`).join(""):"<span class='none'>—</span>"}</div></div>
+  <div class="shift"><div class="sl">🌙 16:00–00:00</div><div class="emps">${n.length?n.map(n=>`<span class="emp night">${n}</span>`).join(""):"<span class='none'>—</span>"}</div></div>
+  ${reps.length?`<div class="rep">🛌 ${reps.join(", ")}</div>`:""}
+</div>`;
+    }).join("");
+    return `<!DOCTYPE html><html lang="el"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Πρόγραμμα ${weekLabel}</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#F8F6F1;padding:12px;max-width:480px;margin:0 auto}
+h1{color:#2F3A1C;font-size:20px;text-align:center;font-weight:900;letter-spacing:2px;margin-bottom:2px}
+.sub{color:#9AAA78;font-size:13px;text-align:center;margin-bottom:16px}
+.card{background:#fff;border-radius:14px;padding:14px 16px;margin-bottom:10px;box-shadow:0 2px 10px rgba(47,58,28,0.09);border:1px solid #E7D8B5}
+.day-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;padding-bottom:8px;border-bottom:2px solid #F0E8D0}
+.day-name{font-weight:800;font-size:16px;color:#2F3A1C}
+.day-date{font-size:12px;color:#9AAA78;background:#F8F6F1;padding:3px 10px;border-radius:20px}
+.shift{margin-bottom:7px}
+.sl{font-size:10px;font-weight:700;color:#9AAA78;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:5px}
+.emps{display:flex;flex-wrap:wrap;gap:5px}
+.emp{background:#E7D8B5;color:#2F3A1C;padding:5px 12px;border-radius:20px;font-size:13px;font-weight:600}
+.emp.night{background:#2F3A1C;color:#C8D8A0}
+.none{color:#C8C0B0;font-size:13px}
+.rep{margin-top:8px;font-size:12px;color:#7D5A9A;background:#F3E8FF;padding:5px 12px;border-radius:10px}
+footer{text-align:center;margin-top:20px;color:#C8C0B0;font-size:11px}
+</style></head><body>
+<h1>🌿 BRIKI</h1>
+<div class="sub">Εβδομαδιαίο Πρόγραμμα ${weekLabel}</div>
+${cards}
+<footer>© BRIKI v2.0 🌿</footer>
+</body></html>`;
+  }
+
+  // Print version — compact for 80mm landscape thermal
+  const rows = SHIFTS_DEF.map(sh => {
+    const cells = weekDates.map(date => {
+      const emps = getSlot(date, sh.id).map(empName);
+      const reps = sh.id === "morning" ? repEmps(date) : [];
+      return `<td>${emps.map(n=>`<div class="e">${n}</div>`).join("")}${reps.map(n=>`<div class="r">🛌${n}</div>`).join("")}</td>`;
+    }).join("");
+    const icon = sh.id === "morning" ? "☀️ 07:00–15:00" : "🌙 16:00–00:00";
+    return `<tr><td class="lbl">${icon}</td>${cells}</tr>`;
+  }).join("");
+
+  return `<!DOCTYPE html><html lang="el"><head>
+<meta charset="UTF-8"><title>Πρόγραμμα ${weekLabel}</title>
+<style>
+@page{size:landscape;margin:2mm}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Arial,sans-serif;font-size:7pt}
+h2{font-size:8pt;margin-bottom:2mm;color:#2F3A1C}
+table{width:100%;border-collapse:collapse}
+th{background:#2F3A1C;color:#C8D8A0;padding:2px 3px;font-size:6.5pt;text-align:center}
+td{border:1px solid #C8B898;padding:2px 3px;vertical-align:top}
+td.lbl{background:#EFE8DA;font-weight:700;font-size:6.5pt;white-space:nowrap;width:36mm;text-align:center}
+.e{background:#E7D8B5;border-radius:2px;padding:1px 3px;margin-bottom:1px;font-size:6pt}
+.r{color:#7D5A9A;font-size:5.5pt}
+</style></head><body>
+<h2>🌿 Εβδομαδιαίο Πρόγραμμα &nbsp;${weekLabel}</h2>
+<table>
+<thead><tr><th></th>${weekDates.map((_,i)=>`<th>${DAYS_SHORT[i]}<br>${d2s(weekDates[i])}</th>`).join("")}</tr></thead>
+<tbody>${rows}</tbody>
+</table>
+</body></html>`;
+}
+
 function Schedule({ employees, role, empId: currentEmpId }) {
   const [weekStart, setWeekStart] = useState(() => getMonday(new Date()));
   const [schedule, setSchedule, schedLoaded] = useCloud("schedule", "data", {});
@@ -1183,12 +1264,25 @@ function Schedule({ employees, role, empId: currentEmpId }) {
   const [showBusy, setShowBusy]               = useState(false);
   const [showConstraints, setShowConstraints] = useState(false);
   const [showRep, setShowRep]                 = useState(false);
+  const [repWeekFilter, setRepWeekFilter]     = useState("current");
   const [conForm, setConForm]                 = useState({
     empId: role === "employee" ? (currentEmpId || "") : "", day: "", shift: "morning"
   });
   const [repForm, setRepForm] = useState({
     empId: role === "employee" ? (currentEmpId || "") : "", day: ""
   });
+
+  // Tuesday auto-purge: remove constraints & dayOff from previous weeks
+  useEffect(() => {
+    if (!schedLoaded) return;
+    const dow = (new Date().getDay() + 6) % 7; // 0=Mon 1=Tue
+    if (dow !== 1) return;
+    const currentMonday = getMonday(new Date());
+    const freshC = (constraints || []).filter(c => c.date >= currentMonday);
+    if (freshC.length !== (constraints || []).length) setConstraints(freshC);
+    const freshD = (dayOff || []).filter(r => r.date >= currentMonday);
+    if (freshD.length !== (dayOff || []).length) setDayOff(freshD);
+  }, [schedLoaded]); // eslint-disable-line
 
   const weekDates = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(weekStart); d.setDate(d.getDate() + i);
@@ -1233,6 +1327,31 @@ function Schedule({ employees, role, empId: currentEmpId }) {
 
   const prevWeek = () => { const d = new Date(weekStart); d.setDate(d.getDate() - 7); setWeekStart(d.toISOString().split("T")[0]); };
   const nextWeek = () => { const d = new Date(weekStart); d.setDate(d.getDate() + 7); setWeekStart(d.toISOString().split("T")[0]); };
+
+  // All weeks that have schedule data + current ±4 weeks
+  const availableWeeks = useMemo(() => {
+    const weeks = new Set(Object.keys(schedule || {}));
+    for (let i = -8; i <= 4; i++) {
+      const d = new Date(); d.setDate(d.getDate() + i * 7);
+      weeks.add(getMonday(d));
+    }
+    return [...weeks].sort().reverse();
+  }, [schedule]);
+
+  const printSchedule = () => {
+    const win = window.open("", "_blank");
+    win.document.write(buildScheduleHTML({ employees, weekDates, getSlot, dayOff, forMobile: false }));
+    win.document.close();
+    win.focus();
+    setTimeout(() => win.print(), 400);
+  };
+
+  const shareSchedule = () => {
+    const html = buildScheduleHTML({ employees, weekDates, getSlot, dayOff, forMobile: true });
+    const blob = new Blob([html], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    window.open(url, "_blank");
+  };
 
   const shiftWarnings = (assigned, shift) => {
     const emps = assigned.map(id => (employees || []).find(e => e.id === id)).filter(Boolean);
@@ -1324,14 +1443,22 @@ function Schedule({ employees, role, empId: currentEmpId }) {
                 <Btn onClick={autoGenerate} small>🤖 Αυτόματο</Btn>
               </>
             )}
+            <Btn onClick={printSchedule} small bg={T.cat_bg} style={{ border: `1px solid ${T.border}`, color: T.text }}>🖨️ Εκτύπωση</Btn>
+            <Btn onClick={shareSchedule} small bg={T.blue}>📤 Κοινοποίηση</Btn>
           </div>
         } />
 
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
         <Btn onClick={prevWeek} small bg={T.cat_bg} style={{ border: `1px solid ${T.border}`, color: T.text }}>‹</Btn>
-        <span style={{ color: T.text, fontFamily: "Georgia, serif", fontSize: 15 }}>
-          {fmtD(weekDates[0])} – {fmtD(weekDates[6])}
-        </span>
+        <select value={weekStart} onChange={e => setWeekStart(e.target.value)}
+          style={{ ...st.input, width: "auto", fontSize: 14, fontFamily: "Georgia, serif", padding: "6px 10px" }}>
+          {availableWeeks.map(w => {
+            const d1 = `${w.slice(8)}/${w.slice(5,7)}`;
+            const d2end = new Date(w); d2end.setDate(d2end.getDate() + 6);
+            const d2 = `${String(d2end.getDate()).padStart(2,"0")}/${String(d2end.getMonth()+1).padStart(2,"0")}`;
+            return <option key={w} value={w}>{d1} – {d2}</option>;
+          })}
+        </select>
         <Btn onClick={nextWeek} small bg={T.cat_bg} style={{ border: `1px solid ${T.border}`, color: T.text }}>›</Btn>
       </div>
 
@@ -1570,19 +1697,35 @@ function Schedule({ employees, role, empId: currentEmpId }) {
               <Btn onClick={addRep} small>+ Προσθήκη</Btn>
             </div>
           </div>
-          <div style={{ maxHeight: 280, overflowY: "auto" }}>
-            {(dayOff || []).length === 0
-              ? <div style={{ textAlign: "center", padding: 16, color: T.text2 }}>Δεν υπάρχουν ρεπό</div>
-              : (dayOff || []).map(r => {
-                  const emp = (employees || []).find(e => e.id === r.empId);
-                  return (
-                    <div key={r.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: `1px solid ${T.border}` }}>
-                      <span style={{ color: T.text, fontSize: 14 }}>🛌 <b>{emp ? `${emp.name} ${emp.surname}` : "–"}</b> — {fmtD(r.date)}</span>
-                      <Btn onClick={() => delRep(r.id)} small bg={T.red}>✕</Btn>
-                    </div>
-                  );
-                })
-            }
+          <Sep label="Καταχωρημένα Ρεπό" />
+          <div style={{ marginBottom: 10 }}>
+            <select value={repWeekFilter} onChange={e => setRepWeekFilter(e.target.value)}
+              style={{ ...st.input, width: "auto", fontSize: 13 }}>
+              <option value="current">Τρέχουσα Εβδομάδα ({weekStart.slice(8)}/{weekStart.slice(5,7)})</option>
+              {availableWeeks.filter(w => w !== weekStart).map(w => {
+                const d2 = new Date(w); d2.setDate(d2.getDate() + 6);
+                return <option key={w} value={w}>{w.slice(8)}/{w.slice(5,7)} – {String(d2.getDate()).padStart(2,"0")}/{String(d2.getMonth()+1).padStart(2,"0")}</option>;
+              })}
+              <option value="all">Όλα</option>
+            </select>
+          </div>
+          <div style={{ maxHeight: 260, overflowY: "auto" }}>
+            {(() => {
+              const filterStart = repWeekFilter === "all" ? null : repWeekFilter === "current" ? weekStart : repWeekFilter;
+              const filterEnd   = filterStart ? (() => { const d = new Date(filterStart); d.setDate(d.getDate()+6); return d.toISOString().split("T")[0]; })() : null;
+              const filtered = (dayOff || []).filter(r => !filterStart || (r.date >= filterStart && r.date <= filterEnd));
+              return filtered.length === 0
+                ? <div style={{ textAlign: "center", padding: 16, color: T.text2 }}>Δεν υπάρχουν ρεπό</div>
+                : filtered.sort((a,b) => a.date.localeCompare(b.date)).map(r => {
+                    const emp = (employees || []).find(e => e.id === r.empId);
+                    return (
+                      <div key={r.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: `1px solid ${T.border}` }}>
+                        <span style={{ color: T.text, fontSize: 14 }}>🛌 <b>{emp ? `${emp.name} ${emp.surname}` : "–"}</b> — {fmtD(r.date)}</span>
+                        <Btn onClick={() => delRep(r.id)} small bg={T.red}>✕</Btn>
+                      </div>
+                    );
+                  });
+            })()}
           </div>
           <Btn onClick={() => setShowRep(false)} style={{ width: "100%", marginTop: 12 }}>Κλείσιμο</Btn>
         </Modal>
