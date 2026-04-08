@@ -1176,10 +1176,10 @@ const isFrozen   = (dateISO, shift) =>
 
 function Schedule({ employees, role, empId: currentEmpId }) {
   const [weekStart, setWeekStart] = useState(() => getMonday(new Date()));
-  const [schedule, setSchedule, schedLoaded] = useIDB("schedule", "data", {});
-  const [busy, setBusy]                       = useIDB("busyDays",  "data", {});
-  const [constraints, setConstraints]         = useIDB("settings",  "constraints", []);
-  const [dayOff, setDayOff]                   = useIDB("settings",  "dayOff", []);
+  const [schedule, setSchedule, schedLoaded] = useCloud("schedule", "data", {});
+  const [busy, setBusy]                       = useCloud("busyDays",  "data", {});
+  const [constraints, setConstraints]         = useCloud("settings",  "constraints", []);
+  const [dayOff, setDayOff]                   = useCloud("settings",  "dayOff", []);
   const [showBusy, setShowBusy]               = useState(false);
   const [showConstraints, setShowConstraints] = useState(false);
   const [showRep, setShowRep]                 = useState(false);
