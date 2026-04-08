@@ -2036,19 +2036,25 @@ export default function App() {
 }
 
 
-// NEW: Sync Functions
-const syncToSupabase = async (data) => {
+// ═══════════════════════════════════════════════════════════
+// SUPABASE SYNC FUNCTIONS (Hybrid)
+// ═══════════════════════════════════════════════════════════
+const syncToSupabase = async () => {
   try {
+    const data = await idb.exportAll();
+
     // Sync Employees
     if (data.employees) {
-      for (const emp of Object.values(data.employees)) {
+      const employeesArray = Object.values(data.employees);
+      for (const emp of employeesArray) {
         await supabase.from('employees').upsert(emp, { onConflict: 'id' });
       }
     }
 
     // Sync Attendance
     if (data.attendance) {
-      for (const att of Object.values(data.attendance)) {
+      const attArray = Object.values(data.attendance);
+      for (const att of attArray) {
         await supabase.from('attendance').upsert(att, { onConflict: 'id' });
       }
     }
@@ -2060,8 +2066,7 @@ const syncToSupabase = async (data) => {
       }
     }
 
-    // Sync Ledger (if you have it)
-    console.log("✅ Synced to Supabase");
+    console.log("✅ Successfully synced to Supabase");
     return true;
   } catch (error) {
     console.error("Sync failed:", error);
@@ -2069,35 +2074,57 @@ const syncToSupabase = async (data) => {
   }
 };
 
-const restoreFromSupabase = async () => {
+const restoreFromSupabase = async (setEmployees, setAttendance, setDailyData) => {
   try {
     const { data: emps } = await supabase.from('employees').select('*');
     const { data: atts } = await supabase.from('attendance').select('*');
-    const { data: daily } = await supabase.from('daily_data').select('*');
+    const { data: dailyRows } = await supabase.from('daily_data').select('*');
 
-    // Convert to object format expected by your app
     const dailyObj = {};
-    daily.forEach(d => { dailyObj[d.date] = d; });
+    dailyRows.forEach(row => {
+      dailyObj[row.date] = row;
+    });
 
-    // You can import them back to IndexedDB here
-    alert("✅ Data restored from Supabase! (Implement full import if needed)");
-    console.log({ employees: emps, attendance: atts, dailyData: dailyObj });
-    return { employees: emps, attendance: atts, dailyData: dailyObj };
+    // Import back to IndexedDB
+    await idb.importAll({
+      employees: emps.reduce((acc, e) => { acc[e.id] = e; return acc; }, {}),
+      attendance: atts.reduce((acc, a) => { acc[a.id] = a; return acc; }, {}),
+      dailyData: dailyObj
+    });
+
+    // Update state
+    setEmployees(emps);
+    setAttendance(atts);
+    setDailyData(dailyObj);
+
+    alert("✅ Data successfully restored from Supabase!");
+    return true;
   } catch (error) {
     alert("Restore failed: " + error.message);
+    console.error(error);
+    return false;
   }
 };
 
-// Add Sync Button in BackupRestore component
+// Updated BackupRestore with Cloud Sync
 function BackupRestore({ onSync, onRestore }) {
   const [msg, setMsg] = useState("");
 
-  const doBackup = async () => { /* your original backup */ };
+  const doBackup = async () => {
+    const data = await idb.exportAll();
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `briki_backup_${todayISO()}.json`; a.click();
+    URL.revokeObjectURL(url);
+    setMsg("✅ Local Backup downloaded!");
+    setTimeout(() => setMsg(""), 3000);
+  };
 
   const doSync = async () => {
-    setMsg("Syncing to cloud...");
+    setMsg("☁️ Syncing to Supabase...");
     const success = await onSync();
-    setMsg(success ? "✅ Synced to Supabase!" : "❌ Sync failed");
+    setMsg(success ? "✅ Synced successfully to cloud!" : "❌ Sync failed");
     setTimeout(() => setMsg(""), 4000);
   };
 
@@ -2105,16 +2132,81 @@ function BackupRestore({ onSync, onRestore }) {
     <Card style={{ marginBottom: 20, background: T.cat_bg }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
         <div>
-          <div style={{ color: T.text, fontWeight: 700, fontSize: 15 }}>💾 Local + Cloud Sync</div>
+          <div style={{ color: T.text, fontWeight: 700, fontFamily: "Georgia, serif", fontSize: 15 }}>💾 Local + Cloud Backup</div>
           <div style={{ color: T.text2, fontSize: 12 }}>IndexedDB + Supabase</div>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <Btn onClick={doBackup} bg={T.green} small>⬇️ Local Backup</Btn>
           <Btn onClick={doSync} bg={T.accent} small>☁️ Sync to Cloud</Btn>
           <Btn onClick={onRestore} bg={T.blue} small>☁️ Restore from Cloud</Btn>
         </div>
       </div>
-      {msg && <div style={{ marginTop: 10, color: T.green, fontWeight: 700 }}>{msg}</div>}
+      {msg && <div style={{ marginTop: 10, color: T.green, fontWeight: 700, fontSize: 13 }}>{msg}</div>}
     </Card>
+  );
+}
+
+// Main App with Sync integration
+export default function App() {
+  const [page, setPage] = useState("login");
+  const [role, setRole] = useState(null);
+  const [userName, setUserName] = useState("");
+  const [empId, setEmpId] = useState(null);
+
+  const [employees, setEmployees, empLoaded] = useIDB("employees", "list", []);
+  const [attendance, setAttendance, attLoaded] = useIDB("attendance", "list", []);
+  const [dailyData, setDailyData, ddLoaded] = useIDB("dailyData", "data", {});
+  const [initBalances, setInitBalances, ibLoaded] = useIDB("settings", "initBalances", { kouti: 0, trapeza: 0 });
+  const [althData, setAlthData, althLoaded] = useIDB("althData", "list", []);
+  const [affiliates, setAffiliates, affLoaded] = useIDB("affiliates", "list", []);
+  const [links, setLinks, linksLoaded] = useIDB("links", "list", []);
+
+  const allLoaded = empLoaded && attLoaded && ddLoaded && ibLoaded && althLoaded && affLoaded && linksLoaded;
+
+  const nav = (p) => setPage(p);
+
+  if (page === "login") {
+    return <Login onLogin={(r, n, eid) => { 
+      setRole(r); setUserName(n); setEmpId(eid || null); 
+      setPage(r === "employee" ? "attendance" : "dashboard"); 
+    }} />;
+  }
+
+  if (!allLoaded) {
+    return <div style={{ minHeight: "100vh", background: T.bg, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ color: T.text2, fontSize: 16 }}>🌿 Φόρτωση...</div>
+    </div>;
+  }
+
+  const ctx = { role, userName, empId, employees, setEmployees, attendance, setAttendance, dailyData, setDailyData, initBalances, setInitBalances, althData, setAlthData, affiliates, setAffiliates, links, setLinks, nav };
+
+  const pages = {
+    dashboard: <Dashboard {...ctx} />,
+    cash: <Cash {...ctx} />,
+    accounts: <Accounts {...ctx} />,
+    affiliates: <Affiliates {...ctx} />,
+    employees: <Employees {...ctx} />,
+    attendance: <Attendance {...ctx} />,
+    schedule: <Schedule {...ctx} />,
+    reports: <Reports {...ctx} />,
+    alth: <ALTH {...ctx} />,
+    links: <Links {...ctx} role={role} />,
+  };
+
+  return (
+    <div style={{ display: "flex", minHeight: "100vh", background: T.bg }}>
+      <Sidebar page={page} nav={nav} role={role} userName={userName} onLogout={() => { setRole(null); setUserName(""); setPage("login"); }} />
+      <div style={{ flex: 1, overflow: "auto", minWidth: 0 }}>
+        {role !== "employee" && page === "dashboard" && (
+          <div style={{ padding: "16px 24px 0" }}>
+            <BackupRestore 
+              onSync={syncToSupabase}
+              onRestore={() => restoreFromSupabase(setEmployees, setAttendance, setDailyData)}
+            />
+          </div>
+        )}
+        {pages[page] || <div style={{ padding: 24, color: T.text2 }}>Σελίδα δεν βρέθηκε</div>}
+      </div>
+    </div>
   );
 }
