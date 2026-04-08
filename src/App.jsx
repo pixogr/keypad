@@ -102,6 +102,7 @@ const fmtD = (iso) => { if (!iso) return ""; const [y, m, d] = iso.split("-"); r
 const uid = () => Math.random().toString(36).slice(2, 9);
 const ADMIN_PIN = "1212";
 const PARTNER_PIN = "2121";
+const _EP = "25300"; // employee login password
 
 const DAYS_GR = ["Δευτέρα", "Τρίτη", "Τετάρτη", "Πέμπτη", "Παρασκευή", "Σάββατο", "Κυριακή"];
 const MONTHS_GR = ["Ιαν","Φεβ","Μαρ","Απρ","Μαΐ","Ιουν","Ιουλ","Αυγ","Σεπ","Οκτ","Νοε","Δεκ"];
@@ -211,6 +212,8 @@ function Login({ onLogin }) {
   const [mode, setMode] = useState("select");
   const [pin, setPin] = useState("");
   const [empId, setEmpId] = useState("");
+  const [empPass, setEmpPass] = useState("");
+  const [empPassMode, setEmpPassMode] = useState(false);
   const [err, setErr] = useState("");
   const [employees, setEmployees] = useState([]);
   useEffect(() => { db.get("employees", "list").then(v => setEmployees(v || [])); }, []);
@@ -220,11 +223,16 @@ function Login({ onLogin }) {
     else if (pin === PARTNER_PIN) onLogin("partner", "Εταίρος");
     else setErr("Λάθος κωδικός");
   };
-  const handleEmp = () => {
+  const handleEmpSelect = () => {
     if (!empId) { setErr("Επίλεξε εργαζόμενο"); return; }
+    setEmpPassMode(true); setErr("");
+  };
+  const handleEmpLogin = () => {
+    if (empPass !== _EP) { setErr("Λάθος κωδικός"); return; }
     const emp = employees.find(e => e.id === empId);
     if (emp) onLogin("employee", emp.name + " " + emp.surname, emp.id);
   };
+  const empName = employees.find(e => e.id === empId);
 
   return (
     <div style={{ minHeight: "100vh", background: T.bg, display: "flex", alignItems: "center", justifyContent: "center", position: "relative", overflow: "hidden" }}>
@@ -244,7 +252,6 @@ function Login({ onLogin }) {
           )}
           {mode === "admin" && (
             <div>
-              <div style={{ color: T.text2, fontSize: 13, marginBottom: 14, fontFamily: "'Trebuchet MS', sans-serif" }}></div>
               <Inp label="PIN" type="password" value={pin} onChange={setPin} placeholder="••••" />
               {err && <div style={{ color: T.red, fontSize: 13, marginBottom: 8 }}>{err}</div>}
               <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
@@ -253,14 +260,27 @@ function Login({ onLogin }) {
               </div>
             </div>
           )}
-          {mode === "emp" && (
+          {mode === "emp" && !empPassMode && (
             <div>
-              <Sel label="Εργαζόμενος" value={empId} onChange={setEmpId}
+              <Sel label="Εργαζόμενος" value={empId} onChange={v => { setEmpId(v); setErr(""); }}
                 options={[{ value: "", label: "-- Επίλεξε --" }, ...employees.map(e => ({ value: e.id, label: e.name + " " + e.surname }))]} />
               {err && <div style={{ color: T.red, fontSize: 13, marginBottom: 8 }}>{err}</div>}
               <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
-                <Btn onClick={() => { setMode("select"); setErr(""); }} bg={T.cat_bg} style={{ border: `1px solid ${T.border}`, color: T.text }}>Πίσω</Btn>
-                <Btn onClick={handleEmp} style={{ flex: 1 }}>Είσοδος →</Btn>
+                <Btn onClick={() => { setMode("select"); setErr(""); setEmpId(""); }} bg={T.cat_bg} style={{ border: `1px solid ${T.border}`, color: T.text }}>Πίσω</Btn>
+                <Btn onClick={handleEmpSelect} style={{ flex: 1 }}>Επόμενο →</Btn>
+              </div>
+            </div>
+          )}
+          {mode === "emp" && empPassMode && (
+            <div>
+              <div style={{ color: T.text2, fontSize: 13, marginBottom: 14, fontFamily: "'Trebuchet MS', sans-serif" }}>
+                👤 {empName ? `${empName.name} ${empName.surname}` : ""}
+              </div>
+              <Inp label="Κωδικός" type="password" value={empPass} onChange={setEmpPass} placeholder="••••" />
+              {err && <div style={{ color: T.red, fontSize: 13, marginBottom: 8 }}>{err}</div>}
+              <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+                <Btn onClick={() => { setEmpPassMode(false); setEmpPass(""); setErr(""); }} bg={T.cat_bg} style={{ border: `1px solid ${T.border}`, color: T.text }}>Πίσω</Btn>
+                <Btn onClick={handleEmpLogin} style={{ flex: 1 }}>Είσοδος →</Btn>
               </div>
             </div>
           )}
@@ -1328,14 +1348,16 @@ td.lbl{background:#EFE8DA;font-weight:700;font-size:6.5pt;white-space:nowrap;wid
 
 function Schedule({ employees, role, empId: currentEmpId }) {
   const [weekStart, setWeekStart] = useState(() => getMonday(new Date()));
-  const [schedule, setSchedule, schedLoaded] = useCloud("schedule", "data", {});
-  const [busy, setBusy]                       = useCloud("busyDays",  "data", {});
-  const [constraints, setConstraints]         = useCloud("settings",  "constraints", []);
-  const [dayOff, setDayOff]                   = useCloud("settings",  "dayOff", []);
-  const [showBusy, setShowBusy]               = useState(false);
-  const [showConstraints, setShowConstraints] = useState(false);
-  const [showRep, setShowRep]                 = useState(false);
-  const [repWeekFilter, setRepWeekFilter]     = useState("current");
+  const [schedule, setSchedule, schedLoaded]     = useCloud("schedule", "data", {});
+  const [busy, setBusy]                          = useCloud("busyDays",  "data", {});
+  const [constraints, setConstraints, conLoaded] = useCloud("settings",  "constraints", []);
+  const [dayOff, setDayOff, dayOffLoaded]        = useCloud("settings",  "dayOff", []);
+  const [workDays, setWorkDays]                  = useCloud("settings",  "workDays", {});
+  const [showBusy, setShowBusy]                  = useState(false);
+  const [showConstraints, setShowConstraints]    = useState(false);
+  const [showRep, setShowRep]                    = useState(false);
+  const [showWorkDays, setShowWorkDays]          = useState(false);
+  const [repWeekFilter, setRepWeekFilter]        = useState("current");
   const [conForm, setConForm]                 = useState({
     empId: role === "employee" ? (currentEmpId || "") : "", day: "", shift: "morning"
   });
@@ -1346,7 +1368,7 @@ function Schedule({ employees, role, empId: currentEmpId }) {
 
   // Tuesday auto-purge: remove constraints & dayOff from previous weeks
   useEffect(() => {
-    if (!schedLoaded) return;
+    if (!conLoaded || !dayOffLoaded) return;
     const dow = (new Date().getDay() + 6) % 7; // 0=Mon 1=Tue
     if (dow !== 1) return;
     const currentMonday = getMonday(new Date());
@@ -1354,7 +1376,7 @@ function Schedule({ employees, role, empId: currentEmpId }) {
     if (freshC.length !== (constraints || []).length) setConstraints(freshC);
     const freshD = (dayOff || []).filter(r => r.date >= currentMonday);
     if (freshD.length !== (dayOff || []).length) setDayOff(freshD);
-  }, [schedLoaded]); // eslint-disable-line
+  }, [conLoaded, dayOffLoaded]); // eslint-disable-line
 
   const weekDates = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(weekStart); d.setDate(d.getDate() + i);
@@ -1477,13 +1499,33 @@ function Schedule({ employees, role, empId: currentEmpId }) {
     return w;
   };
 
+  const clearWeek = () => {
+    if (!confirm("Διαγραφή ΟΛΟΥ του προγράμματος για αυτή την εβδομάδα;")) return;
+    setSchedule(s => { const n = { ...s }; delete n[weekKey]; return n; });
+  };
+
   const autoGenerate = () => {
-    if (!confirm("Αυτόματη δημιουργία;\n• Δεν αλλάζουν οι περασμένες μέρες και το πρωί της σήμερα.\n• Οι χειροκίνητες επιλογές στις υπόλοιπες μέρες θα αντικατασταθούν.")) return;
+    if (!confirm("Αυτόματη δημιουργία;\n• Κλειδωμένες μέρες και χειροκίνητες επιλογές διατηρούνται.\n• Προστίθενται μόνο εργαζόμενοι που λείπουν για να συμπληρωθεί το πλήρωμα.")) return;
     const currentWeek = schedule[weekKey] || {};
     const newSch = { ...currentWeek };
     const partners = (employees || []).filter(e => e.role === "partner");
     const partner1 = partners[0] || null;
     const partner2 = partners[1] || null;
+
+    // Count current week shifts per employee (before adding more)
+    const empWeekShifts = {};
+    weekDates.forEach(d => {
+      SHIFTS_DEF.forEach(sh => {
+        (currentWeek[d]?.[sh.id] || []).forEach(eid => {
+          empWeekShifts[eid] = (empWeekShifts[eid] || 0) + 1;
+        });
+      });
+    });
+
+    const atMax = (empId) => {
+      const wd = workDays[empId];
+      return wd && (empWeekShifts[empId] || 0) >= wd.max;
+    };
 
     weekDates.forEach(date => {
       if (isFrozen(date, "morning") && isFrozen(date, "night")) return;
@@ -1492,27 +1534,40 @@ function Schedule({ employees, role, empId: currentEmpId }) {
       const minM  = 2 + busyM;
       const minN  = 2 + busyN;
       const allNP = (employees || []).filter(e => e.role !== "partner");
-      const availM = allNP.filter(e => !hasConstraint(e.id, date, "morning") && !hasRep(e.id, date));
-      const availN = allNP.filter(e => !hasConstraint(e.id, date, "night")   && !hasRep(e.id, date));
-      const frozenM   = isFrozen(date, "morning");
-      const morningCrew = frozenM ? [...(currentWeek[date]?.morning || [])] : [];
-      const nightCrew   = [];
+
+      // Start from existing crew (preserve manual assignments)
+      const morningCrew = [...(currentWeek[date]?.morning || [])];
+      const nightCrew   = [...(currentWeek[date]?.night   || [])];
+      const frozenM = isFrozen(date, "morning");
+
+      const canAddM = (e) => !hasConstraint(e.id, date, "morning") && !hasRep(e.id, date) && !atMax(e.id);
+      const canAddN = (e) => !hasConstraint(e.id, date, "night")   && !hasRep(e.id, date) && !atMax(e.id);
+
       const p2HasRep = partner2 && hasRep(partner2.id, date);
 
-      if (!frozenM && partner1 && !hasRep(partner1.id, date) && !hasConstraint(partner1.id, date, "morning")) {
+      if (!frozenM && partner1 && !hasRep(partner1.id, date) && !hasConstraint(partner1.id, date, "morning") && !morningCrew.includes(partner1.id)) {
         morningCrew.push(partner1.id);
+        empWeekShifts[partner1.id] = (empWeekShifts[partner1.id] || 0) + 1;
       }
-      if (partner2 && !hasRep(partner2.id, date) && !hasConstraint(partner2.id, date, "night")) {
+      if (partner2 && !hasRep(partner2.id, date) && !hasConstraint(partner2.id, date, "night") && !nightCrew.includes(partner2.id)) {
         nightCrew.push(partner2.id);
+        empWeekShifts[partner2.id] = (empWeekShifts[partner2.id] || 0) + 1;
       }
-      if (p2HasRep && partner1 && !hasRep(partner1.id, date) && !hasConstraint(partner1.id, date, "night")) {
-        if (!nightCrew.includes(partner1.id)) nightCrew.push(partner1.id);
+      if (p2HasRep && partner1 && !hasRep(partner1.id, date) && !hasConstraint(partner1.id, date, "night") && !nightCrew.includes(partner1.id)) {
+        nightCrew.push(partner1.id);
+        empWeekShifts[partner1.id] = (empWeekShifts[partner1.id] || 0) + 1;
         const idx = morningCrew.indexOf(partner1.id);
-        if (idx >= 0) morningCrew.splice(idx, 1);
+        if (idx >= 0) { morningCrew.splice(idx, 1); empWeekShifts[partner1.id] = Math.max(0, (empWeekShifts[partner1.id] || 1) - 1); }
       }
 
+      const availM = allNP.filter(e => canAddM(e) && !morningCrew.includes(e.id));
+      const availN = allNP.filter(e => canAddN(e) && !nightCrew.includes(e.id));
+
       if (!frozenM) {
-        const addM = (cond) => { const e = availM.find(e => cond(e) && !morningCrew.includes(e.id)); if (e) morningCrew.push(e.id); };
+        const addM = (cond) => {
+          const e = availM.find(e => cond(e) && !morningCrew.includes(e.id));
+          if (e) { morningCrew.push(e.id); empWeekShifts[e.id] = (empWeekShifts[e.id] || 0) + 1; availM.splice(availM.indexOf(e), 1); }
+        };
         const hasMC = (ab) => morningCrew.some(id => (employees || []).find(e => e.id === id)?.abilities?.[ab]);
         if (!hasMC("openShop"))   addM(e => e.abilities?.openShop);
         if (!hasMC("makeCoffee")) addM(e => e.abilities?.makeCoffee);
@@ -1520,10 +1575,14 @@ function Schedule({ employees, role, empId: currentEmpId }) {
         if (!hasMC("serve"))      addM(e => e.abilities?.serve);
         while (morningCrew.length < minM) {
           const e = availM.find(e => !morningCrew.includes(e.id) && !nightCrew.includes(e.id));
-          if (e) morningCrew.push(e.id); else break;
+          if (e) { morningCrew.push(e.id); empWeekShifts[e.id] = (empWeekShifts[e.id] || 0) + 1; availM.splice(availM.indexOf(e), 1); } else break;
         }
       }
-      const addN = (cond) => { const e = availN.find(e => cond(e) && !nightCrew.includes(e.id) && !morningCrew.includes(e.id)); if (e) nightCrew.push(e.id); };
+
+      const addN = (cond) => {
+        const e = availN.find(e => cond(e) && !nightCrew.includes(e.id) && !morningCrew.includes(e.id));
+        if (e) { nightCrew.push(e.id); empWeekShifts[e.id] = (empWeekShifts[e.id] || 0) + 1; availN.splice(availN.indexOf(e), 1); }
+      };
       const hasNC = (ab) => nightCrew.some(id => (employees || []).find(e => e.id === id)?.abilities?.[ab]);
       if (!hasNC("closeShop")) addN(e => e.abilities?.closeShop);
       if (!hasNC("makeCoffee")) addN(e => e.abilities?.makeCoffee);
@@ -1531,9 +1590,10 @@ function Schedule({ employees, role, empId: currentEmpId }) {
       if (!hasNC("serve"))      addN(e => e.abilities?.serve);
       while (nightCrew.length < minN) {
         const e = availN.find(e => !nightCrew.includes(e.id) && !morningCrew.includes(e.id));
-        if (e) nightCrew.push(e.id); else break;
+        if (e) { nightCrew.push(e.id); empWeekShifts[e.id] = (empWeekShifts[e.id] || 0) + 1; availN.splice(availN.indexOf(e), 1); } else break;
       }
-      newSch[date] = { morning: morningCrew, night: nightCrew };
+
+      newSch[date] = { ...currentWeek[date], morning: morningCrew, night: nightCrew };
     });
     setSchedule(s => ({ ...s, [weekKey]: newSch }));
   };
@@ -1552,7 +1612,9 @@ function Schedule({ employees, role, empId: currentEmpId }) {
               <>
                 <Btn onClick={() => setShowRep(true)} small bg={T.purple} style={{ opacity: 0.85 }}>🛌 Ρεπό</Btn>
                 <Btn onClick={() => setShowBusy(true)} small bg={T.cat_bg} style={{ border: `1px solid ${T.border}`, color: T.text }}>⚙️ Πολυσύχναστες</Btn>
+                <Btn onClick={() => setShowWorkDays(true)} small bg={T.yellow}>👥 Ημέρες</Btn>
                 <Btn onClick={autoGenerate} small>🤖 Αυτόματο</Btn>
+                <Btn onClick={clearWeek} small bg={T.red}>🗑️ Καθαρισμός</Btn>
               </>
             )}
             <Btn onClick={printSchedule} small bg={T.cat_bg} style={{ border: `1px solid ${T.border}`, color: T.text }}>🖨️ Εκτύπωση</Btn>
@@ -1890,6 +1952,60 @@ function Schedule({ employees, role, empId: currentEmpId }) {
             })()}
           </div>
           <Btn onClick={() => setShowRep(false)} style={{ width: "100%", marginTop: 12 }}>Κλείσιμο</Btn>
+        </Modal>
+      )}
+
+      {showWorkDays && role !== "employee" && (
+        <Modal title="👥 Ημέρες Εργασίας / Εβδομάδα" onClose={() => setShowWorkDays(false)} wide>
+          <div style={{ color: T.text2, fontSize: 13, marginBottom: 16 }}>
+            Ορίσε ελάχιστο και μέγιστο αριθμό ημερών εργασίας ανά εβδομάδα για κάθε εργαζόμενο. Το αυτόματο πρόγραμμα τα λαμβάνει υπόψη.
+          </div>
+          <div style={{ maxHeight: 400, overflowY: "auto" }}>
+            {(employees || []).filter(e => e.role !== "partner").length === 0
+              ? <div style={{ textAlign: "center", padding: 20, color: T.text3 }}>Δεν υπάρχουν εργαζόμενοι</div>
+              : (employees || []).filter(e => e.role !== "partner").map(emp => {
+                  const wd = workDays[emp.id] || { min: 3, max: 5 };
+                  const update = (field, delta) => {
+                    const cur = workDays[emp.id] || { min: 3, max: 5 };
+                    let nv = { ...cur, [field]: (cur[field] || 0) + delta };
+                    if (nv.min < 1) nv.min = 1;
+                    if (nv.max > 7) nv.max = 7;
+                    if (nv.min > nv.max) { if (field === "min") nv.max = nv.min; else nv.min = nv.max; }
+                    setWorkDays(prev => ({ ...prev, [emp.id]: nv }));
+                  };
+                  return (
+                    <div key={emp.id} style={{
+                      display: "flex", alignItems: "center", justifyContent: "space-between",
+                      padding: "12px 0", borderBottom: `1px solid ${T.border}`
+                    }}>
+                      <div style={{ color: T.text, fontWeight: 600, fontSize: 14, minWidth: 120 }}>
+                        {emp.name} {emp.surname}
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+                          <div style={{ fontSize: 11, color: T.text3, fontWeight: 600 }}>ΕΛΑΧιστο</div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            <Btn onClick={() => update("min", -1)} small bg={T.cat_bg} style={{ border: `1px solid ${T.border}`, color: T.text, width: 32, padding: 0 }}>−</Btn>
+                            <div style={{ width: 28, textAlign: "center", fontWeight: 700, fontSize: 16, color: T.text }}>{wd.min}</div>
+                            <Btn onClick={() => update("min", +1)} small bg={T.cat_bg} style={{ border: `1px solid ${T.border}`, color: T.text, width: 32, padding: 0 }}>+</Btn>
+                          </div>
+                        </div>
+                        <div style={{ color: T.text3, fontSize: 18, fontWeight: 300 }}>–</div>
+                        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+                          <div style={{ fontSize: 11, color: T.text3, fontWeight: 600 }}>ΜΕΓΙΣΤΟ</div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            <Btn onClick={() => update("max", -1)} small bg={T.cat_bg} style={{ border: `1px solid ${T.border}`, color: T.text, width: 32, padding: 0 }}>−</Btn>
+                            <div style={{ width: 28, textAlign: "center", fontWeight: 700, fontSize: 16, color: T.text }}>{wd.max}</div>
+                            <Btn onClick={() => update("max", +1)} small bg={T.cat_bg} style={{ border: `1px solid ${T.border}`, color: T.text, width: 32, padding: 0 }}>+</Btn>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+            }
+          </div>
+          <Btn onClick={() => setShowWorkDays(false)} style={{ width: "100%", marginTop: 16 }}>Κλείσιμο</Btn>
         </Modal>
       )}
     </div>
