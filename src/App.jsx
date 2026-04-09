@@ -1367,6 +1367,7 @@ function Schedule({ employees, role, empId: currentEmpId }) {
   const [constraints, setConstraints, conLoaded] = useCloud("settings",  "constraints", []);
   const [dayOff, setDayOff, dayOffLoaded]        = useCloud("settings",  "dayOff", []);
   const [workDays, setWorkDays]                  = useCloud("settings",  "workDays", {});
+  const [fixtures, , fixturesLoaded]             = useCloud("fixtures",  weekStart,  []);
   const [showBusy, setShowBusy]                  = useState(false);
   const [showConstraints, setShowConstraints]    = useState(false);
   const [showRep, setShowRep]                    = useState(false);
@@ -1811,6 +1812,42 @@ function Schedule({ employees, role, empId: currentEmpId }) {
           ))}
         </div>
       </div>
+
+      {/* ── Fixtures grid ── */}
+      {fixturesLoaded && (fixtures || []).length > 0 && (
+        <Card style={{ background: T.white, marginTop: 16, overflowX: "auto" }}>
+          <div style={{ color: T.text2, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 }}>
+            ⚽🏀 Αγώνες Εβδομάδας
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "120px repeat(7, 1fr)", gap: 4, minWidth: 600 }}>
+            {/* header row */}
+            <div />
+            {weekDates.map((date, i) => (
+              <div key={date} style={{ textAlign: "center", fontSize: 11, fontWeight: 700, color: date === isoToday() ? T.accent : T.text3, fontFamily: "Georgia,serif", paddingBottom: 4 }}>
+                {["Δε","Τρ","Τε","Πε","Πα","Σα","Κυ"][i]}
+              </div>
+            ))}
+            {/* one row per fixture */}
+            {(fixtures || []).map(f => (
+              <>
+                <div key={f.id + "_lbl"} style={{ display: "flex", flexDirection: "column", justifyContent: "center", padding: "4px 0", borderTop: `1px solid ${T.border}` }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: T.text, lineHeight: 1.3, fontFamily: "'Trebuchet MS',sans-serif" }}>
+                    {f.sport === "football" ? "⚽" : "🏀"} {f.home}
+                  </div>
+                  <div style={{ fontSize: 10, color: T.text2, fontFamily: "'Trebuchet MS',sans-serif" }}>vs {f.away}</div>
+                </div>
+                {weekDates.map(date => (
+                  <div key={f.id + "_" + date} style={{ textAlign: "center", borderTop: `1px solid ${T.border}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    {f.date === date
+                      ? <span style={{ background: f.sport === "football" ? T.accent : T.blue, color: "#fff", borderRadius: 4, padding: "2px 5px", fontSize: 11, fontWeight: 700, fontFamily: "Georgia,serif" }}>{f.time}</span>
+                      : null}
+                  </div>
+                ))}
+              </>
+            ))}
+          </div>
+        </Card>
+      )}
 
       {/* Weekly stats */}
       {weeklyStats.length > 0 && (
