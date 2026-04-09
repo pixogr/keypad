@@ -1266,7 +1266,7 @@ const isPastDay  = (dateISO) => dateISO < isoToday();
 const isFrozen   = (dateISO, shift) =>
   isPastDay(dateISO) || (dateISO === isoToday() && shift === "morning");
 
-function buildScheduleHTML({ employees, weekDates, getSlot, dayOff, forMobile }) {
+function buildScheduleHTML({ employees, weekDates, getSlot, dayOff, getArrival, forMobile }) {
   const DAYS_SHORT = ["Δευ","Τρι","Τετ","Πεμ","Παρ","Σαβ","Κυρ"];
   const DAYS_FULL  = ["Δευτέρα","Τρίτη","Τετάρτη","Πέμπτη","Παρασκευή","Σάββατο","Κυριακή"];
   const empName = (id) => { const e = (employees||[]).find(e=>e.id===id); return e ? e.name : id; };
@@ -1275,14 +1275,19 @@ function buildScheduleHTML({ employees, weekDates, getSlot, dayOff, forMobile })
   const weekLabel = `${d2s(weekDates[0])} – ${d2s(weekDates[6])}`;
 
   if (forMobile) {
+    const mkEmp = (id, date, sh) => {
+      const name = empName(id);
+      const arr = getArrival ? getArrival(date, sh, id) : "";
+      return `<span class="emp${sh==="night"?" night":""}">${name}${arr?`<span class="arr"> ${arr}</span>`:""}</span>`;
+    };
     const cards = weekDates.map((date, i) => {
-      const m = getSlot(date,"morning").map(empName);
-      const n = getSlot(date,"night").map(empName);
+      const mIds = getSlot(date,"morning");
+      const nIds = getSlot(date,"night");
       const reps = repEmps(date);
       return `<div class="card">
   <div class="day-head"><span class="day-name">${DAYS_FULL[i]}</span><span class="day-date">${d2s(date)}</span></div>
-  <div class="shift"><div class="sl">☀️ 07:00–15:00</div><div class="emps">${m.length?m.map(n=>`<span class="emp">${n}</span>`).join(""):"<span class='none'>—</span>"}</div></div>
-  <div class="shift"><div class="sl">🌙 16:00–00:00</div><div class="emps">${n.length?n.map(n=>`<span class="emp night">${n}</span>`).join(""):"<span class='none'>—</span>"}</div></div>
+  <div class="shift"><div class="sl">☀️ 07:00–15:00</div><div class="emps">${mIds.length?mIds.map(id=>mkEmp(id,date,"morning")).join(""):"<span class='none'>—</span>"}</div></div>
+  <div class="shift"><div class="sl">🌙 16:00–00:00</div><div class="emps">${nIds.length?nIds.map(id=>mkEmp(id,date,"night")).join(""):"<span class='none'>—</span>"}</div></div>
   ${reps.length?`<div class="rep">🛌 ${reps.join(", ")}</div>`:""}
 </div>`;
     }).join("");
@@ -1303,6 +1308,8 @@ h1{color:#2F3A1C;font-size:20px;text-align:center;font-weight:900;letter-spacing
 .emps{display:flex;flex-wrap:wrap;gap:5px}
 .emp{background:#E7D8B5;color:#2F3A1C;padding:5px 12px;border-radius:20px;font-size:13px;font-weight:600}
 .emp.night{background:#2F3A1C;color:#C8D8A0}
+.arr{font-size:11px;background:rgba(111,127,31,0.18);color:#2F3A1C;border-radius:8px;padding:1px 6px;margin-left:3px;font-weight:700}
+.emp.night .arr{background:rgba(200,216,160,0.25);color:#C8D8A0}
 .none{color:#C8C0B0;font-size:13px}
 .rep{margin-top:8px;font-size:12px;color:#7D5A9A;background:#F3E8FF;padding:5px 12px;border-radius:10px}
 footer{text-align:center;margin-top:20px;color:#C8C0B0;font-size:11px}
@@ -1317,9 +1324,14 @@ ${cards}
   // Print version — compact for 80mm landscape thermal
   const rows = SHIFTS_DEF.map(sh => {
     const cells = weekDates.map(date => {
-      const emps = getSlot(date, sh.id).map(empName);
+      const ids = getSlot(date, sh.id);
       const reps = sh.id === "morning" ? repEmps(date) : [];
-      return `<td>${emps.map(n=>`<div class="e">${n}</div>`).join("")}${reps.map(n=>`<div class="r">🛌${n}</div>`).join("")}</td>`;
+      const empHtml = ids.map(id => {
+        const name = empName(id);
+        const arr = getArrival ? getArrival(date, sh.id, id) : "";
+        return `<div class="e">${name}${arr?`<span class="arr">${arr}</span>`:""}</div>`;
+      }).join("");
+      return `<td>${empHtml}${reps.map(n=>`<div class="r">🛌${n}</div>`).join("")}</td>`;
     }).join("");
     const icon = sh.id === "morning" ? "☀️ 07:00–15:00" : "🌙 16:00–00:00";
     return `<tr><td class="lbl">${icon}</td>${cells}</tr>`;
@@ -1337,6 +1349,7 @@ th{background:#2F3A1C;color:#C8D8A0;padding:2px 3px;font-size:6.5pt;text-align:c
 td{border:1px solid #C8B898;padding:2px 3px;vertical-align:top}
 td.lbl{background:#EFE8DA;font-weight:700;font-size:6.5pt;white-space:nowrap;width:36mm;text-align:center}
 .e{background:#E7D8B5;border-radius:2px;padding:1px 3px;margin-bottom:1px;font-size:6pt}
+.arr{font-size:5pt;color:#6F7F1F;font-weight:700;margin-left:2px}
 .r{color:#7D5A9A;font-size:5.5pt}
 </style></head><body>
 <h2>🌿 Εβδομαδιαίο Πρόγραμμα &nbsp;${weekLabel}</h2>
@@ -1359,6 +1372,7 @@ function Schedule({ employees, role, empId: currentEmpId }) {
   const [showRep, setShowRep]                    = useState(false);
   const [showWorkDays, setShowWorkDays]          = useState(false);
   const [repWeekFilter, setRepWeekFilter]        = useState("current");
+  const [showPastCon, setShowPastCon]            = useState(false);
   const [conForm, setConForm]                 = useState({
     empId: role === "employee" ? (currentEmpId || "") : "", day: "", shift: "morning"
   });
@@ -1472,14 +1486,14 @@ function Schedule({ employees, role, empId: currentEmpId }) {
 
   const printSchedule = () => {
     const win = window.open("", "_blank");
-    win.document.write(buildScheduleHTML({ employees, weekDates, getSlot, dayOff, forMobile: false }));
+    win.document.write(buildScheduleHTML({ employees, weekDates, getSlot, dayOff, getArrival, forMobile: false }));
     win.document.close();
     win.focus();
     setTimeout(() => win.print(), 400);
   };
 
   const shareSchedule = () => {
-    const html = buildScheduleHTML({ employees, weekDates, getSlot, dayOff, forMobile: true });
+    const html = buildScheduleHTML({ employees, weekDates, getSlot, dayOff, getArrival, forMobile: true });
     const blob = new Blob([html], { type: "text/html" });
     const url = URL.createObjectURL(blob);
     window.open(url, "_blank");
@@ -1921,15 +1935,36 @@ function Schedule({ employees, role, empId: currentEmpId }) {
                 </div>
               </div>
               <div style={{ maxHeight: 300, overflowY: "auto" }}>
-                {(constraints || []).filter(c => c.empId === currentEmpId).length === 0
-                  ? <div style={{ textAlign: "center", padding: 16, color: T.text2 }}>Δεν έχεις καταχωρήσει αδυναμίες</div>
-                  : (constraints || []).filter(c => c.empId === currentEmpId).map(c => (
-                    <div key={c.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: `1px solid ${T.border}` }}>
-                      <span style={{ color: T.text, fontSize: 14 }}>{fmtD(c.date)} — {c.shift === "morning" ? "☀️ Πρωί" : "🌙 Βράδυ"}</span>
-                      <Btn onClick={() => delConstraint(c.id)} small bg={T.red}>✕</Btn>
-                    </div>
-                  ))
-                }
+                {(() => {
+                  const today = isoToday();
+                  const myCons = (constraints || [])
+                    .filter(c => c.empId === currentEmpId)
+                    .sort((a,b) => a.date.localeCompare(b.date));
+                  const futureCons = myCons.filter(c => c.date >= today);
+                  const pastCons = myCons.filter(c => c.date < today);
+                  if (myCons.length === 0) return <div style={{ textAlign: "center", padding: 16, color: T.text2 }}>Δεν έχεις καταχωρήσει αδυναμίες</div>;
+                  return <>
+                    {futureCons.map(c => (
+                      <div key={c.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: `1px solid ${T.border}` }}>
+                        <span style={{ color: T.text, fontSize: 14 }}>{fmtD(c.date)} — {c.shift === "morning" ? "☀️ Πρωί" : "🌙 Βράδυ"}</span>
+                        <Btn onClick={() => delConstraint(c.id)} small bg={T.red}>✕</Btn>
+                      </div>
+                    ))}
+                    {pastCons.length > 0 && (
+                      <div style={{ marginTop: 8 }}>
+                        <button onClick={() => setShowPastCon(v=>!v)} style={{ background: "none", border: "none", color: T.text3, fontSize: 12, cursor: "pointer", fontFamily: "'Trebuchet MS', sans-serif", padding: "4px 0" }}>
+                          {showPastCon ? "▲" : "▼"} Παρελθόν ({pastCons.length})
+                        </button>
+                        {showPastCon && pastCons.map(c => (
+                          <div key={c.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: `1px solid ${T.border}`, opacity: 0.55 }}>
+                            <span style={{ color: T.text, fontSize: 14 }}>{fmtD(c.date)} — {c.shift === "morning" ? "☀️ Πρωί" : "🌙 Βράδυ"}</span>
+                            <Btn onClick={() => delConstraint(c.id)} small bg={T.red}>✕</Btn>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>;
+                })()}
               </div>
             </>
           ) : (
@@ -1948,18 +1983,33 @@ function Schedule({ employees, role, empId: currentEmpId }) {
                 </div>
               </div>
               <div style={{ maxHeight: 280, overflowY: "auto" }}>
-                {(constraints || []).length === 0
-                  ? <div style={{ textAlign: "center", padding: 16, color: T.text2 }}>Δεν υπάρχουν αδυναμίες</div>
-                  : (constraints || []).map(c => {
-                      const emp = (employees || []).find(e => e.id === c.empId);
-                      return (
-                        <div key={c.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: `1px solid ${T.border}` }}>
-                          <span style={{ color: T.text, fontSize: 14 }}><b>{emp ? `${emp.name} ${emp.surname}` : "–"}</b> — {fmtD(c.date)} — {c.shift === "morning" ? "☀️ Πρωί" : "🌙 Βράδυ"}</span>
-                          <Btn onClick={() => delConstraint(c.id)} small bg={T.red}>✕</Btn>
-                        </div>
-                      );
-                    })
-                }
+                {(() => {
+                  const today = isoToday();
+                  const sorted = (constraints || []).sort((a,b) => a.date.localeCompare(b.date));
+                  const futureCons = sorted.filter(c => c.date >= today);
+                  const pastCons = sorted.filter(c => c.date < today);
+                  const renderRow = (c, faded) => {
+                    const emp = (employees || []).find(e => e.id === c.empId);
+                    return (
+                      <div key={c.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: `1px solid ${T.border}`, opacity: faded ? 0.55 : 1 }}>
+                        <span style={{ color: T.text, fontSize: 14 }}><b>{emp ? `${emp.name} ${emp.surname}` : "–"}</b> — {fmtD(c.date)} — {c.shift === "morning" ? "☀️ Πρωί" : "🌙 Βράδυ"}</span>
+                        <Btn onClick={() => delConstraint(c.id)} small bg={T.red}>✕</Btn>
+                      </div>
+                    );
+                  };
+                  if (sorted.length === 0) return <div style={{ textAlign: "center", padding: 16, color: T.text2 }}>Δεν υπάρχουν αδυναμίες</div>;
+                  return <>
+                    {futureCons.map(c => renderRow(c, false))}
+                    {pastCons.length > 0 && (
+                      <div style={{ marginTop: 8 }}>
+                        <button onClick={() => setShowPastCon(v=>!v)} style={{ background: "none", border: "none", color: T.text3, fontSize: 12, cursor: "pointer", fontFamily: "'Trebuchet MS', sans-serif", padding: "4px 0" }}>
+                          {showPastCon ? "▲" : "▼"} Παρελθόν ({pastCons.length})
+                        </button>
+                        {showPastCon && pastCons.map(c => renderRow(c, true))}
+                      </div>
+                    )}
+                  </>;
+                })()}
               </div>
             </>
           )}
@@ -2428,6 +2478,25 @@ export default function App() {
   const [userName, setUserName] = useState("");
   const [empId, setEmpId] = useState(null);
 
+  // Restore session (up to 1 week) on mount
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("briki_session");
+      if (raw) {
+        const s = JSON.parse(raw);
+        const ONE_WEEK = 7 * 24 * 60 * 60 * 1000;
+        if (s.ts && Date.now() - s.ts < ONE_WEEK) {
+          setRole(s.role);
+          setUserName(s.userName);
+          setEmpId(s.empId);
+          setPage(s.role === "employee" ? "attendance" : "dashboard");
+        } else {
+          localStorage.removeItem("briki_session");
+        }
+      }
+    } catch { localStorage.removeItem("briki_session"); }
+  }, []); // eslint-disable-line
+
   const [employees,    setEmployees,    empLoaded]  = useCloud("employees",  "list",   []);
   const [attendance,   setAttendance,   attLoaded]  = useCloud("attendance", "list",   []);
   const [dailyData,    setDailyData,    ddLoaded]   = useCloud("dailyData",  "data",   {});
@@ -2442,6 +2511,7 @@ export default function App() {
 
   if (page === "login") {
     return <Login onLogin={(r, n, eid) => {
+      localStorage.setItem("briki_session", JSON.stringify({ role: r, userName: n, empId: eid || null, ts: Date.now() }));
       setRole(r); setUserName(n); setEmpId(eid || null);
       setPage(r === "employee" ? "attendance" : "dashboard");
     }} />;
@@ -2472,7 +2542,7 @@ export default function App() {
 
   return (
     <div style={{ display: "flex", minHeight: "100vh", background: T.bg }}>
-      <Sidebar page={page} nav={nav} role={role} userName={userName} onLogout={() => { setRole(null); setUserName(""); setPage("login"); }} />
+      <Sidebar page={page} nav={nav} role={role} userName={userName} onLogout={() => { localStorage.removeItem("briki_session"); setRole(null); setUserName(""); setPage("login"); }} />
       <div style={{ flex: 1, overflow: "auto", minWidth: 0 }}>
         {role !== "employee" && page === "dashboard" && (
           <div style={{ padding: "16px 24px 0" }}>
