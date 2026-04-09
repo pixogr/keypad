@@ -296,7 +296,7 @@ function Login({ onLogin }) {
 //  SIDEBAR
 // ═══════════════════════════════════════════════════════════
 function Sidebar({ page, nav, role, onLogout, userName }) {
-  const [col, setCol] = useState(false);
+  const [col, setCol] = useState(() => window.innerWidth < 768);
   const items = role === "employee"
     ? [
         { id: "attendance", label: "Παρουσίες", icon: "⏱️" },
@@ -1649,36 +1649,30 @@ function Schedule({ employees, role, empId: currentEmpId }) {
 
   return (
     <div style={{ padding: 24 }}>
-      <PageHeader title="📅 Εβδομαδιαίο Πρόγραμμα"
-        actions={
-          <div style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-end" }}>
-            {/* Row 1: Personnel */}
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
-              <Btn onClick={() => setShowConstraints(true)} small bg={T.red} style={{ opacity: 0.85 }}>
-                🚫 {role === "employee" ? "Αδυναμία μου" : "Αδυναμίες"}
-              </Btn>
-              {role !== "employee" && (
-                <>
-                  <Btn onClick={() => setShowRep(true)} small bg={T.purple} style={{ opacity: 0.85 }}>🛌 Ρεπό</Btn>
-                  <Btn onClick={() => setShowWorkDays(true)} small bg={T.yellow} style={{ color: T.badge_text }}>👥 Ημέρες</Btn>
-                </>
-              )}
-            </div>
-            {/* Row 2: Schedule tools (admin only) */}
-            {role !== "employee" && (
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
-                <Btn onClick={() => setShowBusy(true)} small bg={T.cat_bg} style={{ border: `1px solid ${T.border}`, color: T.text }}>⚙️ Πολυσύχναστες</Btn>
-                <Btn onClick={autoGenerate} small>🤖 Αυτόματο</Btn>
-                <Btn onClick={clearWeek} small bg={T.red}>🗑️ Καθαρισμός</Btn>
-              </div>
-            )}
-            {/* Row 3: Output */}
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
-              <Btn onClick={printSchedule} small bg={T.cat_bg} style={{ border: `1px solid ${T.border}`, color: T.text }}>🖨️ Εκτύπωση</Btn>
-              <Btn onClick={shareSchedule} small bg={T.blue}>📤 Κοινοποίηση</Btn>
-            </div>
-          </div>
-        } />
+      <PageHeader title="📅 Εβδομαδιαίο Πρόγραμμα" />
+
+      {/* Action buttons — 3-column grid below title */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, max-content)", gap: 6, marginBottom: 20 }}>
+        <Btn onClick={() => setShowConstraints(true)} small bg={T.red} style={{ opacity: 0.85 }}>
+          🚫 {role === "employee" ? "Αδυναμία μου" : "Αδυναμίες"}
+        </Btn>
+        {role !== "employee" ? (
+          <>
+            <Btn onClick={() => setShowRep(true)} small bg={T.purple} style={{ opacity: 0.85 }}>🛌 Ρεπό</Btn>
+            <Btn onClick={() => setShowWorkDays(true)} small bg={T.yellow} style={{ color: T.badge_text }}>👥 Ημέρες</Btn>
+            <Btn onClick={() => setShowBusy(true)} small bg={T.cat_bg} style={{ border: `1px solid ${T.border}`, color: T.text }}>⚙️ Πολυσύχναστες</Btn>
+            <Btn onClick={autoGenerate} small>🤖 Αυτόματο</Btn>
+            <Btn onClick={clearWeek} small bg={T.red}>🗑️ Καθαρισμός</Btn>
+            <Btn onClick={printSchedule} small bg={T.cat_bg} style={{ border: `1px solid ${T.border}`, color: T.text }}>🖨️ Εκτύπωση</Btn>
+            <Btn onClick={shareSchedule} small bg={T.blue}>📤 Κοινοποίηση</Btn>
+          </>
+        ) : (
+          <>
+            <Btn onClick={printSchedule} small bg={T.cat_bg} style={{ border: `1px solid ${T.border}`, color: T.text }}>🖨️ Εκτύπωση</Btn>
+            <Btn onClick={shareSchedule} small bg={T.blue}>📤 Κοινοποίηση</Btn>
+          </>
+        )}
+      </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
         <Btn onClick={prevWeek} small bg={T.cat_bg} style={{ border: `1px solid ${T.border}`, color: T.text }}>‹</Btn>
