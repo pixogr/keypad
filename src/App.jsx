@@ -1342,7 +1342,7 @@ ${cards}
 <style>
 @page{size:landscape;margin:8mm}
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:Arial,sans-serif;font-size:11pt}
+@import url('https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;700;900&display=swap');body{font-family:'Open Sans',Arial,sans-serif;font-size:11pt}
 h2{font-size:13pt;margin-bottom:4mm;color:#2F3A1C;font-weight:900}
 table{width:auto;border-collapse:collapse;min-width:160mm}
 th{background:#2F3A1C;color:#C8D8A0;padding:5px 8px;font-size:10pt;text-align:center;white-space:nowrap}
@@ -1824,7 +1824,7 @@ function Schedule({ employees, role, empId: currentEmpId }) {
             <div />
             {weekDates.map((date, i) => (
               <div key={date} style={{ textAlign: "center", fontSize: 11, fontWeight: 700, color: date === isoToday() ? T.accent : T.text3, fontFamily: "Georgia,serif", paddingBottom: 4 }}>
-                {["Δε","Τρ","Τε","Πε","Πα","Σα","Κυ"][i]}
+                {["Δευτέρα","Τρίτη","Τετάρτη","Πέμπτη","Παρασκευή","Σάββατο","Κυριακή"][i]}
               </div>
             ))}
             {/* one row per fixture */}
