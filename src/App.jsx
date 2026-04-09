@@ -1340,17 +1340,17 @@ ${cards}
   return `<!DOCTYPE html><html lang="el"><head>
 <meta charset="UTF-8"><title>Πρόγραμμα ${weekLabel}</title>
 <style>
-@page{size:landscape;margin:2mm}
+@page{size:landscape;margin:8mm}
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:Arial,sans-serif;font-size:7pt}
-h2{font-size:8pt;margin-bottom:2mm;color:#2F3A1C}
-table{width:100%;border-collapse:collapse}
-th{background:#2F3A1C;color:#C8D8A0;padding:2px 3px;font-size:6.5pt;text-align:center}
-td{border:1px solid #C8B898;padding:2px 3px;vertical-align:top}
-td.lbl{background:#EFE8DA;font-weight:700;font-size:6.5pt;white-space:nowrap;width:36mm;text-align:center}
-.e{background:#E7D8B5;border-radius:2px;padding:1px 3px;margin-bottom:1px;font-size:6pt}
-.arr{font-size:5pt;color:#6F7F1F;font-weight:700;margin-left:2px}
-.r{color:#7D5A9A;font-size:5.5pt}
+body{font-family:Arial,sans-serif;font-size:11pt}
+h2{font-size:13pt;margin-bottom:4mm;color:#2F3A1C;font-weight:900}
+table{width:auto;border-collapse:collapse;min-width:160mm}
+th{background:#2F3A1C;color:#C8D8A0;padding:5px 8px;font-size:10pt;text-align:center;white-space:nowrap}
+td{border:1px solid #C8B898;padding:5px 8px;vertical-align:top}
+td.lbl{background:#EFE8DA;font-weight:700;font-size:10pt;white-space:nowrap;width:42mm;text-align:center}
+.e{background:#E7D8B5;border-radius:3px;padding:2px 6px;margin-bottom:2px;font-size:10pt;display:inline-block}
+.arr{font-size:8pt;color:#6F7F1F;font-weight:700;margin-left:3px}
+.r{color:#7D5A9A;font-size:9pt}
 </style></head><body>
 <h2>🌿 Εβδομαδιαίο Πρόγραμμα &nbsp;${weekLabel}</h2>
 <table>
